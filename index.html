@@ -318,51 +318,119 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 
 
 
-            // 4. Gráfico de Burbujas de Oportunidad
-            if (data.opportunity) {
-                const ctxOpportunity = document.getElementById('opportunityBubbleChart');
-                // Asignar colores basados en la etiqueta del dataset
-                const datasetsWithColors = data.opportunity.datasets.map(d => ({
-                    ...d,
-                    backgroundColor: d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
-                                     d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
-                                     d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
-                                     d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
-                                     'rgba(255, 45, 85, 0.7)' // Marketing Digital
-                }));
+// ----------------------------------------------------------------------
+// 3. FUNCIÓN DE RENDERIZADO DEL GRÁFICO DE OPORTUNIDAD (Bubble Plot)
+// ----------------------------------------------------------------------
 
-                if (ctxOpportunity && !opportunityBubbleChart) {
-                    opportunityBubbleChart = new Chart(ctxOpportunity, {
-                        type: 'bubble',
-                        data: {
-                            datasets: datasetsWithColors
-                        },
-                        options: {
-                            ...commonChartOptions,
-                            scales: {
-                                x: { ...commonChartOptions.scales.x, title: { display: true, text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)' } },
-                                y: { ...commonChartOptions.scales.y, title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' } }
-                            },
-                            plugins: {
-                                ...commonChartOptions.plugins, legend: { position: 'bottom' },
-                                tooltip: {
-                                    ...commonChartOptions.plugins.tooltip,
-                                    callbacks: {
-                                        title: (tooltipItems) => tooltipItems[0].dataset.label,
-                                        label: (context) => {
-                                            const d = context.raw;
-                                            return `Contratos: ${d.x} | Valor Prom.: $${d.y.toFixed(2)}M | Brecha: ${d.r}`;
-                                        }
-                                    }
-                                }
+/**
+ * Inicializa o actualiza el Gráfico de Burbujas de Oportunidad.
+ * Se utiliza el campo 'r' del dato para determinar el tamaño de la burbuja.
+ * **Mejora:** Aplica 'jitter' (desplazamiento aleatorio) a la coordenada X para evitar la superposición.
+ * * @param {object} data - Objeto de datos con la propiedad 'opportunity'.
+ */
+function renderOpportunityChart(data) {
+    // Busca el canvas usando el ID correcto del HTML
+    const ctxOpportunity = document.getElementById('opportunityScatterChart');
+    
+    if (!ctxOpportunity || !data.opportunity || !data.opportunity.datasets) {
+        console.error("[OPPORTUNITY CHART] No se encontró el elemento canvas o faltan datos.");
+        return;
+    }
+
+    // CLAVE DE MEJORA: Aplicar 'jitter' a los datos para separar burbujas superpuestas.
+    const JITTER_MAX_OFFSET = 1.0; // Desplazamiento máximo en X (en unidades del eje)
+
+    const datasetsWithJitterAndColors = data.opportunity.datasets.map(d => {
+        // Aplicar un pequeño desplazamiento aleatorio (Jitter) para separar burbujas
+        const dataWithJitter = d.data.map(point => {
+            // Genera un desplazamiento aleatorio entre -JITTER_MAX_OFFSET y +JITTER_MAX_OFFSET
+            const jitterX = (Math.random() - 0.5) * JITTER_MAX_OFFSET * 2;
+            return {
+                x: point.x + jitterX,
+                y: point.y, // Mantener Y fija para la alineación vertical
+                r: point.r
+            };
+        });
+        
+        // Asignar colores basados en la etiqueta del dataset
+        const color = d.label.includes('Sistemas') ? PALETTE.indigo :
+                      d.label.includes('Ciberseguridad') ? PALETTE.purple :
+                      d.label.includes('Cloud Computing') ? PALETTE.blue :
+                      d.label.includes('Desarrollo de Apps') ? PALETTE.lightBlue :
+                      PALETTE.pink; 
+
+        return {
+            ...d,
+            data: dataWithJitter,
+            backgroundColor: color,
+            label: d.label
+        };
+    });
+
+
+    if (!opportunityScatterChart) {
+        opportunityScatterChart = new Chart(ctxOpportunity, {
+            type: 'bubble', // ESTE ES EL TIPO CORRECTO PARA X, Y, R
+            plugins: [ChartDataLabels],
+            data: {
+                datasets: datasetsWithJitterAndColors // Usar los datos con Jitter
+            },
+            options: {
+                ...commonChartOptions,
+                scales: {
+                    x: { 
+                        ...commonChartOptions.scales.x, 
+                        // Ajustar el rango del eje X para acomodar el jitter
+                        min: Math.max(0, Math.min(...datasetsWithJitterAndColors.flatMap(d => d.data.map(p => p.x))) - 5),
+                        max: Math.max(...datasetsWithJitterAndColors.flatMap(d => d.data.map(p => p.x))) + 5,
+                        title: { display: true, text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)', font: { weight: 'bold', size: 14 } } 
+                    },
+                    y: { 
+                        ...commonChartOptions.scales.y, 
+                        title: { display: true, text: 'Valor Promedio Contrato (Millones USD)', font: { weight: 'bold', size: 14 } } 
+                    }
+                },
+                plugins: {
+                    ...commonChartOptions.plugins, 
+                    legend: { position: 'bottom', labels: { boxWidth: 20 } },
+                    tooltip: {
+                        ...commonChartOptions.plugins.tooltip,
+                        callbacks: {
+                            title: (tooltipItems) => tooltipItems[0].dataset.label,
+                            label: (context) => {
+                                const d = context.raw;
+                                // Muestra los valores después de aplicar jitter (pero redondeados para claridad)
+                                return [
+                                    `Licitaciones: ${Math.round(d.x)}`, // Redondeado para visualización
+                                    `Valor Promedio: $${d.y.toFixed(2)}M`,
+                                    `Brecha Oportunidad (R): ${d.r}`
+                                ];
                             }
                         }
-                    });
-                } else if (opportunityBubbleChart) {
-                    opportunityBubbleChart.data.datasets = datasetsWithColors;
-                    opportunityBubbleChart.update();
+                    },
+                    // Configuración de DataLabels para etiquetar cada punto
+                    datalabels: {
+                        display: true,
+                        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                        borderRadius: 4,
+                        padding: 6,
+                        font: { weight: 'bold', size: 10 },
+                        formatter: (value, context) => {
+                            // Muestra solo la inicial de la categoría para no saturar el gráfico
+                            const label = context.dataset.label;
+                            return label.split(' ').map(w => w.charAt(0)).join('');
+                        }
+                    }
                 }
-            } else { console.warn("Datos de Oportunidad (opportunity) faltantes."); }
+            }
+        });
+    } else {
+        // Usa la variable global correcta para la actualización
+        opportunityScatterChart.data.datasets = datasetsWithJitterAndColors;
+        opportunityScatterChart.update();
+    }
+}
+            
             
             // 5. Gráfico de Brecha de Habilidades (Stacked Bar)
             if (data.skillGap) {
