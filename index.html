@@ -219,75 +219,104 @@
                 }
             } else { console.warn("Datos de Crecimiento (growth) faltantes. El gráfico no se actualizará."); }
 
-          // 3. Gráfico de Barras de Demanda (Horizontal Bar) - Foco en la demanda
-            const ctxDemand = document.getElementById('demandBarChart');
-            
-            if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
-                
-                // *** FIX: Asegurar que los datos sean numéricos y procesamiento de etiquetas ***
-const numericData = data.growth.data.map(Number);
-                 //const numericData = data.demand.data.map(Number); // Usamos Number en lugar de parseFloat para consistencia
-                const labels = data.demand.labels.map(label => wrapLabels(label, 16));
-                
-                console.log("[DEMAND CHART] Datos numéricos y etiquetas procesadas listos:", {numericData, labels});
+          // 3. Gráfico de Barras de Demanda (Horizontal Bar) - Foco en la demanda 
+const ctxDemand = document.getElementById('demandBarChart');
 
-                // 2. Si el gráfico no existe, crearlo
-                if (!demandBarChart) {
-                    demandBarChart = new Chart(ctxDemand, {
-                        type: 'bar',
-                        // Registrar el plugin de datalabels solo para este chart
-                        plugins: [ChartDataLabels],
-                        data: {
-                            labels: labels, 
-                            datasets: [{
-                                label: 'Valor Contratado (Millones USD)',
-                                data: numericData,
-                                backgroundColor: [PALETTE.indigo, PALETTE.purple, PALETTE.blue, PALETTE.lightBlue, PALETTE.pink],
-                                borderRadius: 6
-                            }]
+if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
+
+    // *** FIX 1: Asegurar datos numéricos ***
+    const numericData = data.demand.data.map(v => Number(v));
+
+    // *** FIX 2: Asegurar etiquetas multilínea correctas ***
+    const labels = data.demand.labels.map(label => wrapLabels(label, 18));
+
+    // Registrar plugin de DataLabels
+    Chart.register(ChartDataLabels);
+
+    // Crear gráfico si no existe
+    if (!demandBarChart) {
+
+        demandBarChart = new Chart(ctxDemand, {
+            type: 'bar',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Valor Contratado (Millones USD)',
+                    data: numericData,
+                    backgroundColor: [
+                        PALETTE.indigo,
+                        PALETTE.purple,
+                        PALETTE.blue,
+                        PALETTE.lightBlue,
+                        PALETTE.pink
+                    ],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                ...commonChartOptions,
+                indexAxis: 'y',
+
+                scales: {
+                    x: {
+                        beginAtZero: true,
+
+                        // *** FIX 3: Forzar un máximo correcto para gráficos pequeños o grandes ***
+                        suggestedMax: Math.max(...numericData) * 1.2,
+
+                        title: {
+                            display: true,
+                            text: 'Millones USD'
                         },
-                        options: {
-                            ...commonChartOptions, 
-                            indexAxis: 'y', // Configuración clave para gráfico de barras horizontal
-                            scales: {
-                                x: { ...commonChartOptions.scales.x, title: { display: true, text: 'Millones USD' } },
-                                y: { 
-                                    ...commonChartOptions.scales.y, 
-                                    grid: { display: false },
-                                    // Se confía en el manejo nativo de Chart.js para las etiquetas multilínea con indexAxis: 'y'
-                                }
-                            },
-                            plugins: { 
-                                ...commonChartOptions.plugins, 
-                                legend: { display: false },
-                                // Configuración de DataLabels para mostrar valores
-                                datalabels: { 
-                                    anchor: 'end',
-                                    align: 'end',
-                                    offset: 8, 
-                                    color: PALETTE.textDark,
-                                    font: { weight: 'bold', size: 12 },
-                                    formatter: (value, context) => {
-                                        // Muestra el valor con un decimal y la etiqueta 'M' de Millones
-                                        return `$${value.toFixed(1)}M`; 
-                                    }
-                                }
-                            }
+                        ticks: {
+                            callback: value => `${value}M`
                         }
-                    });
-                    console.log("Gráfico de Demanda CREADO.");
-                } else {
-                    // 3. Si el gráfico existe, solo actualizar los datos
-                    demandBarChart.data.labels = labels;
-                    demandBarChart.data.datasets[0].data = numericData;
-                    demandBarChart.update(); 
-                    console.log("Gráfico de Demanda ACTUALIZADO.");
+                    },
+
+                    y: {
+                        grid: { display: false }
+                    }
+                },
+
+                plugins: {
+                    ...commonChartOptions.plugins,
+                    legend: { display: false },
+
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'end',
+                        offset: 8,
+                        color: PALETTE.textDark,
+                        font: {
+                            weight: 'bold',
+                            size: 12
+                        },
+                        formatter: value => `$${value.toFixed(1)}M`
+                    }
                 }
-            } else if (!ctxDemand) {
-                console.error("[DEMAND CHART] No se encontró el elemento canvas #demandBarChart.");
-            } else { 
-                console.warn("[DEMAND CHART] Datos de Demanda (demand) faltantes o incompletos:", data.demand); 
             }
+        });
+
+        console.log("Gráfico de Demanda CREADO.");
+
+    } else {
+
+        // *** FIX 4: Actualización correcta ***
+        demandBarChart.data.labels = labels;
+        demandBarChart.data.datasets[0].data = numericData;
+        demandBarChart.update();
+
+        console.log("Gráfico de Demanda ACTUALIZADO.");
+    }
+
+} else if (!ctxDemand) {
+    console.error("[DEMAND CHART] No se encontró el elemento canvas #demandBarChart.");
+
+} else {
+    console.warn("[DEMAND CHART] Datos de Demanda faltantes o incompletos:", data.demand);
+}
+
 
             // 4. Gráfico de Burbujas de Oportunidad
             if (data.opportunity) {
