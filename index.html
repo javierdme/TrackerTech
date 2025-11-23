@@ -226,10 +226,8 @@
                 
                 // *** FIX: Asegurar que los datos sean numéricos y procesamiento de etiquetas ***
                 //const numericData = data.demand.data.map(Number); // Usamos Number en lugar de parseFloat para consistencia
-                const numericData = data.growth.data.map(Number);
-                const labels = data.demand.labels.map(label => wrapLabels(label, 16));
-                
-                console.log("[DEMAND CHART] Datos numéricos y etiquetas procesadas listos:", {numericData, labels});
+                //const labels = data.demand.labels.map(label => wrapLabels(label, 16));
+                //console.log("[DEMAND CHART] Datos numéricos y etiquetas procesadas listos:", {numericData, labels});
 
                 // 2. Si el gráfico no existe, crearlo
                 if (!demandBarChart) {
