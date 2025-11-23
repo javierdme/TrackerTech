@@ -317,102 +317,108 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 }
 
 
-// 4. Gráfico de Burbujas de Oportunidad con Columnas Verticales
-if (data.opportunity) {
-    const ctxOpportunity = document.getElementById('opportunityBubbleChart');
-    
-    // 1. OBTENER LAS ETIQUETAS DE CATEGORÍA PARA EL EJE X
-    // Esto se usará para definir las columnas (el índice de cada etiqueta será el valor 'x' del dato)
-    const categoryLabels = data.opportunity.datasets.map(d => d.label);
+// Variable global para mantener la instancia del gráfico (debe estar definida globalmente)
+let opportunityBubbleChart = null; 
+// Asumimos que la función commonChartOptions está disponible
 
-    // 2. MODIFICAR DATASETS: 
-    // - Asignar colores (sin cambios).
-    // - Asignar la posición 'x' basada en el índice.
-    // - Asignar el radio 'r' al número de Licitaciones (competencia).
-    const datasetsWithColorsAndAdjustedData = data.opportunity.datasets.map((d, index) => {
-        // Asumimos que cada dataset tiene solo UN punto de dato (data[0])
-        const originalPoint = d.data[0]; 
+// Función de inicialización del gráfico
+function initializeOpportunityChart(data) {
+    // 4. Gráfico de Burbujas de Oportunidad (Separado por Columnas Verticales)
+    if (data.opportunity) {
+        const ctxOpportunity = document.getElementById('opportunityBubbleChart');
         
-        // Creamos el nuevo punto de dato:
-        // x: Índice de la columna (0, 1, 2, ...)
-        // y: Valor Promedio (sin cambios)
-        // r: N° de Licitaciones (lo que antes era d.x, ahora es el radio)
-        const adjustedData = [{
-            x: index, 
-            y: originalPoint.y, 
-            r: originalPoint.x // El radio 'r' ahora representa el N° de Licitaciones
-        }];
-        
-        // Mantenemos la lógica de colores
-        const backgroundColor = d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
-                                d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
-                                d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
-                                d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
-                                'rgba(255, 45, 85, 0.7)'; // Marketing Digital
-        
-        return {
-            ...d,
-            data: adjustedData, // Usar los datos ajustados
-            backgroundColor: backgroundColor
-        };
-    });
+        // 1. Definir etiquetas y preparar datos
+        const categoryLabels = data.opportunity.datasets.map(d => d.label);
 
-    if (ctxOpportunity && !opportunityBubbleChart) {
-        opportunityBubbleChart = new Chart(ctxOpportunity, {
-            type: 'bubble',
-            data: {
-                labels: categoryLabels, // Usar las etiquetas de categoría aquí
-                datasets: datasetsWithColorsAndAdjustedData
-            },
-            options: {
-                ...commonChartOptions,
-                scales: {
-                    // *** CAMBIO CLAVE 1: EJE X ES CATEGORÍA ***
-                    x: { 
-                        type: 'category', 
-                        labels: categoryLabels, // Definir las etiquetas de las columnas
-                        title: { 
-                            display: true, 
-                            text: 'Área de Oportunidad' // Título del eje X
-                        },
-                        // Asegurar que las etiquetas estén centradas
-                        position: 'bottom' 
+        const datasetsWithColorsAndAdjustedData = data.opportunity.datasets.map((d, index) => {
+            // Asumimos que cada dataset tiene solo UN punto de dato (d.data[0])
+            const originalPoint = d.data[0]; 
+            
+            // *** 1. CÁLCULO DEL DESPLAZAMIENTO VERTICAL (JITTER) ***
+            // Aplicamos un pequeño desplazamiento aleatorio al Valor Promedio (Y)
+            const jitterRange = 0.05; // Rango de desplazamiento (ajustar si es necesario)
+            const jitterY = (Math.random() - 0.5) * jitterRange; // Valor entre -0.025 y +0.025
+            
+            const adjustedData = [{
+                x: index,               // Posición Horizontal: El índice define la columna/categoría
+                y: originalPoint.y + jitterY, // Posición Vertical: Valor Promedio + Jitter (para evitar superposición)
+                r: originalPoint.x      // Tamaño (Radio): Usamos el N° de Licitaciones (originalmente d.x) como radio
+            }];
+            
+            // Asignar colores basados en la etiqueta (sin cambios)
+            const backgroundColor = d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
+                                    d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
+                                    d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
+                                    d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
+                                    'rgba(255, 45, 85, 0.7)'; // Marketing Digital
+            
+            return {
+                ...d,
+                data: adjustedData,
+                backgroundColor: backgroundColor
+            };
+        });
+
+        if (ctxOpportunity) {
+            if (!opportunityBubbleChart) {
+                opportunityBubbleChart = new Chart(ctxOpportunity, {
+                    type: 'bubble',
+                    data: {
+                        labels: categoryLabels, // Importante para el eje X categórico
+                        datasets: datasetsWithColorsAndAdjustedData
                     },
-                    // *** CAMBIO CLAVE 2: EJE Y SE MANTIENE NUMÉRICO ***
-                    y: { 
-                        ...commonChartOptions.scales.y, 
-                        title: { 
-                            display: true, 
-                            text: 'Valor Promedio Contrato (Millones USD)' 
-                        } 
-                    }
-                },
-                plugins: {
-                    ...commonChartOptions.plugins, 
-                    legend: { position: 'bottom' },
-                    tooltip: {
-                        ...commonChartOptions.plugins.tooltip,
-                        callbacks: {
-                            title: (tooltipItems) => tooltipItems[0].dataset.label,
-                            label: (context) => {
-                                const d = context.raw;
-                                // El radio (r) ahora es Licitaciones, y el valor y es Valor Promedio
-                                return `Contratos (Tamaño): ${d.r} | Valor Prom.: $${d.y.toFixed(2)}M | Brecha: ${originalPoint.r}`; // Aquí deberías referenciar la 'Brecha' original si quieres mantenerla en el tooltip
+                    options: {
+                        ...commonChartOptions,
+                        scales: {
+                            // *** CAMBIO CLAVE 1: EJE X ES CATEGORÍA ***
+                            x: { 
+                                type: 'category', 
+                                labels: categoryLabels, // Muestra las etiquetas de las áreas en las columnas
+                                title: { 
+                                    display: true, 
+                                    text: 'Área de Oportunidad (Eje Categórico)' 
+                                },
+                                position: 'bottom' 
+                            },
+                            // Eje Y se mantiene numérico para el Valor Promedio
+                            y: { 
+                                ...commonChartOptions.scales.y, 
+                                title: { 
+                                    display: true, 
+                                    text: 'Valor Promedio Contrato (Millones USD)' 
+                                } 
+                            }
+                        },
+                        plugins: {
+                            ...commonChartOptions.plugins, 
+                            legend: { position: 'bottom' },
+                            tooltip: {
+                                ...commonChartOptions.plugins.tooltip,
+                                callbacks: {
+                                    title: (tooltipItems) => tooltipItems[0].dataset.label,
+                                    label: (context) => {
+                                        const d = context.raw;
+                                        // d.r es el N° de Licitaciones, d.y tiene el jitter aplicado
+                                        return `Contratos (Tamaño): ${d.r} | Valor Prom. (Aprox.): $${d.y.toFixed(2)}M | Brecha: ${originalPoint.r}`; 
+                                    }
+                                }
                             }
                         }
                     }
-                }
+                });
+            } else {
+                // Actualizar gráfico existente
+                opportunityBubbleChart.data.labels = categoryLabels;
+                opportunityBubbleChart.data.datasets = datasetsWithColorsAndAdjustedData;
+                opportunityBubbleChart.options.scales.x.labels = categoryLabels;
+                opportunityBubbleChart.update();
             }
-        });
-    } else if (opportunityBubbleChart) {
-        // Actualizar el gráfico
-        opportunityBubbleChart.data.labels = categoryLabels;
-        opportunityBubbleChart.data.datasets = datasetsWithColorsAndAdjustedData;
-        opportunityBubbleChart.options.scales.x.labels = categoryLabels;
-        opportunityBubbleChart.update();
+        } else {
+            console.error("El elemento con ID 'opportunityBubbleChart' no fue encontrado.");
+        }
+    } else { 
+        console.warn("Datos de Oportunidad (opportunity) faltantes."); 
     }
-} else { 
-    console.warn("Datos de Oportunidad (opportunity) faltantes."); 
 }
             
             
