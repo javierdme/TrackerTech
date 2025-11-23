@@ -592,7 +592,7 @@ if (data.opportunity && data.opportunity.datasets) {
             
             const systemPrompt = "Actúa como un consultor de estrategia de negocios de alto nivel para el mercado ecuatoriano. Tu tarea es generar 3 ideas de productos/servicios altamente especializados para el nicho dado, cada uno con una propuesta de valor única, basándote en la información de SERCOP, INEC y BID (que indican alta demanda pública, crecimiento y la necesidad de reducir la tasa de fracaso). Formatea la respuesta usando Markdown (títulos, listas, negritas).";
             const userQuery = `Genera 3 ideas de productos/servicios específicos y nicho para la industria de ${niche}, considerando que el principal desafío a resolver es la Asimetría de Información y el alto riesgo de emprendimiento. Enfócate en soluciones B2G (Business-to-Government) ya que la data de SERCOP indica alto valor.`;
-            const apiKey = "";
+            const apiKey = "AIzaSyD0CMXFQ8nE_h5HQbLgnJNoRLOmAMw1Nd4";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
             
             const payload = {
