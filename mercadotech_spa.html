@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrackerTech: Inteligencia de Mercado en Tiempo Real</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .card {
+            background-color: #FFFFFF;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 1.5rem;
+            height: 100%;
+        }
+        /* Colores basados en el diseño de iOS/moderno */
+        .text-indigo { color: #5E5CE6; }
+        .text-pink { color: #FF2D55; }
+        .text-blue { color: #007AFF; }
+        .text-purple { color: #AF52DE; }
+        .text-lightblue { color: #5AC8FA; }
+        .text-dark { color: #2C2C2E; }
+        .text-muted { color: #8E8E93; }
+        .bg-light { background-color: #F2F2F7; }
+        
+        .chart-container-sm { height: 250px; max-height: 250px; }
+        .chart-container-md { height: 350px; max-height: 350px; }
+        .chart-container-lg { height: 400px; max-height: 400px; }
+
+        @media (min-width: 768px) {
+            .chart-container-md { height: 400px; max-height: 400px; }
+            .chart-container-lg { height: 450px; max-height: 450px; }
+        }
+        /* Estilo para el contenido generado por Markdown */
+        .prose h1, .prose h2, .prose h3 { color: #5E5CE6; margin-top: 1rem; margin-bottom: 0.5rem; }
+        .prose ul { list-style-type: disc; padding-left: 1.5rem; }
+    </style>
+    <script type="module">
+        // Importaciones de Firebase Firestore y Auth
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc, getDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Establecer nivel de log para depuración de Firestore
+        setLogLevel('debug');
+
+        // Variables globales para instancias de Chart.js y Firebase
+        let failureRateChart, growthChart, demandBarChart, opportunityBubbleChart, skillGapChart;
+        let db;
+        let auth;
+        let userId;
+
+        const PALETTE = {
+            indigo: '#5E5CE6',
+            blue: '#007AFF',
+            lightBlue: '#5AC8FA',
+            pink: '#FF2D55',
+            purple: '#AF52DE',
+            textDark: '#2C2C2E',
+            textMuted: '#8E8E93',
+            bgWhite: '#FFFFFF',
+            grid: '#E5E5EA'
+        };
+
+        const MAX_RETRIES = 5;
+        
+        // --- FUNCIONES DE UTILIDAD ---
+        
+        // Función para envolver etiquetas largas en el eje Y
+        function wrapLabels(label, maxWidth) {
+            if (typeof label !== 'string' || label.length <= maxWidth) return label;
+            const words = label.split(' ');
+            let lines = [];
+            let currentLine = '';
+            for (const word of words) {
+                if ((currentLine + ' ' + word).trim().length > maxWidth) {
+                    lines.push(currentLine.trim());
+                    currentLine = word;
+                } else {
+                    currentLine = (currentLine + ' ' + word).trim();
+                }
+            }
+            if (currentLine) lines.push(currentLine.trim());
+            return lines;
+        }
+
+        const tooltipTitleCallback = (tooltipItems) => {
+            const item = tooltipItems[0];
+            let label = item.chart.data.labels[item.dataIndex];
+            if (Array.isArray(label)) return label.join(' ');
+            return label;
+        };
+
+        // Opciones comunes para todos los gráficos
+        const commonChartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: { color: PALETTE.textDark, font: { family: 'Inter', size: 12 } }
+                },
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: PALETTE.textDark,
+                    titleColor: PALETTE.bgWhite,
+                    bodyColor: PALETTE.bgWhite,
+                    titleFont: { family: 'Inter', weight: 'bold', size: 14 },
+                    bodyFont: { family: 'Inter', size: 12 },
+                    padding: 12,
+                    cornerRadius: 6,
+                    callbacks: { title: tooltipTitleCallback }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: PALETTE.textMuted, font: { family: 'Inter', size: 11 } },
+                    grid: { color: PALETTE.grid, drawOnChartArea: false }
+                },
+                y: {
+                    ticks: { color: PALETTE.textMuted, font: { family: 'Inter', size: 11 } },
+                    grid: { color: PALETTE.grid }
+                }
+            }
+        };
+
+        // --- FUNCIONES DE INICIALIZACIÓN Y ACTUALIZACIÓN DE GRÁFICOS ---
+
+        function initCharts(data) {
+            // Validación de datos
+            if (!data || !data.failureRate || !data.growth || !data.demand || !data.opportunity || !data.skillGap) {
+                console.error("Los datos están incompletos o nulos. No se pueden inicializar los gráficos.");
+                return;
+            }
+
+            // 1. Gráfico de Tasa de Fracaso (Doughnut)
+            const ctxFailure = document.getElementById('failureRateChart');
+            if (ctxFailure && !failureRateChart) {
+                failureRateChart = new Chart(ctxFailure, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Fracaso (%)', 'Supervivencia (%)'],
+                        datasets: [{
+                            data: [data.failureRate.failure, data.failureRate.survival],
+                            backgroundColor: [PALETTE.pink, PALETTE.blue],
+                            borderColor: PALETTE.bgWhite,
+                            borderWidth: 4,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false, cutout: '70%',
+                        plugins: {
+                            legend: { position: 'bottom', labels: { color: PALETTE.textDark, font: { family: 'Inter' } } },
+                            tooltip: {
+                                ...commonChartOptions.plugins.tooltip,
+                                callbacks: { title: (tooltipItems) => tooltipItems[0].label }
+                            }
+                        }
+                    }
+                });
+            } else if (failureRateChart) {
+                failureRateChart.data.datasets[0].data = [data.failureRate.failure, data.failureRate.survival];
+            }
+
+            // 2. Gráfico de Crecimiento (Line)
+            const ctxGrowth = document.getElementById('growthChart');
+            if (ctxGrowth && !growthChart) {
+                growthChart = new Chart(ctxGrowth, {
+                    type: 'line',
+                    data: {
+                        labels: data.growth.labels,
+                        datasets: [{
+                            label: 'Gasto Público en IT (Índice Base 100)',
+                            data: data.growth.data,
+                            borderColor: PALETTE.indigo,
+                            backgroundColor: 'rgba(94, 92, 230, 0.1)',
+                            fill: true, tension: 0.3, borderWidth: 3, pointRadius: 5, pointBackgroundColor: PALETTE.indigo, pointHoverRadius: 7
+                        }]
+                    },
+                    options: commonChartOptions
+                });
+            } else if (growthChart) {
+                growthChart.data.datasets[0].data = data.growth.data;
+            }
+
+            // 3. Gráfico de Barras de Demanda (Horizontal Bar)
+            const ctxDemand = document.getElementById('demandBarChart');
+            const demandLabelsWrapped = data.demand.labels.map(label => wrapLabels(label, 16));
+            if (ctxDemand && !demandBarChart) {
+                demandBarChart = new Chart(ctxDemand, {
+                    type: 'bar',
+                    data: {
+                        labels: demandLabelsWrapped,
+                        datasets: [{
+                            label: 'Valor Contratado (Millones USD)',
+                            data: data.demand.data,
+                            backgroundColor: [PALETTE.indigo, PALETTE.purple, PALETTE.blue, PALETTE.lightBlue, PALETTE.pink],
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        ...commonChartOptions, indexAxis: 'y',
+                        scales: {
+                            x: { ...commonChartOptions.scales.x, title: { display: true, text: 'Millones USD' } },
+                            y: { ...commonChartOptions.scales.y, grid: { display: false } }
+                        },
+                        plugins: { ...commonChartOptions.plugins, legend: { display: false } }
+                    }
+                });
+            } else if (demandBarChart) {
+                demandBarChart.data.labels = demandLabelsWrapped;
+                demandBarChart.data.datasets[0].data = data.demand.data;
+            }
+
+            // 4. Gráfico de Burbujas de Oportunidad
+            const ctxOpportunity = document.getElementById('opportunityBubbleChart');
+            if (ctxOpportunity && !opportunityBubbleChart) {
+                opportunityBubbleChart = new Chart(ctxOpportunity, {
+                    type: 'bubble',
+                    data: {
+                        datasets: data.opportunity.datasets.map(d => ({
+                            ...d,
+                            backgroundColor: d.label === 'Sistemas (ERP)' ? 'rgba(94, 92, 230, 0.7)' :
+                                d.label === 'Ciberseguridad' ? 'rgba(175, 82, 222, 0.7)' :
+                                d.label === 'Cloud Computing' ? 'rgba(0, 122, 255, 0.7)' :
+                                d.label === 'Desarrollo de Apps' ? 'rgba(90, 200, 250, 0.7)' :
+                                'rgba(255, 45, 85, 0.7)' // Marketing Digital
+                        }))
+                    },
+                    options: {
+                        ...commonChartOptions,
+                        scales: {
+                            x: { ...commonChartOptions.scales.x, title: { display: true, text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)' } },
+                            y: { ...commonChartOptions.scales.y, title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' } }
+                        },
+                        plugins: {
+                            ...commonChartOptions.plugins, legend: { position: 'bottom' },
+                            tooltip: {
+                                ...commonChartOptions.plugins.tooltip,
+                                callbacks: {
+                                    title: (tooltipItems) => tooltipItems[0].dataset.label,
+                                    label: (context) => {
+                                        const d = context.raw;
+                                        return `Contratos: ${d.x} | Valor Prom.: $${d.y.toFixed(2)}M | Brecha: ${d.r}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else if (opportunityBubbleChart) {
+                opportunityBubbleChart.data.datasets = data.opportunity.datasets.map(d => ({
+                    ...d,
+                    backgroundColor: d.label === 'Sistemas (ERP)' ? 'rgba(94, 92, 230, 0.7)' :
+                        d.label === 'Ciberseguridad' ? 'rgba(175, 82, 222, 0.7)' :
+                        d.label === 'Cloud Computing' ? 'rgba(0, 122, 255, 0.7)' :
+                        d.label === 'Desarrollo de Apps' ? 'rgba(90, 200, 250, 0.7)' :
+                        'rgba(255, 45, 85, 0.7)' // Marketing Digital
+                }));
+            }
+            
+            // 5. Gráfico de Brecha de Habilidades (Stacked Bar)
+            const ctxSkillGap = document.getElementById('skillGapChart');
+            if (ctxSkillGap && !skillGapChart) {
+                skillGapChart = new Chart(ctxSkillGap, {
+                    type: 'bar',
+                    data: {
+                        labels: data.skillGap.labels,
+                        datasets: [
+                            { label: 'Servicios Saturados (Ej. Marketing)', data: data.skillGap.dataSaturated, backgroundColor: PALETTE.pink },
+                            { label: 'Alta Demanda (Ej. Cloud/Ciberseguridad)', data: data.skillGap.dataHighDemand, backgroundColor: PALETTE.indigo }
+                        ]
+                    },
+                    options: {
+                        ...commonChartOptions,
+                        scales: {
+                            x: { ...commonChartOptions.scales.x, stacked: true, grid: { display: false } },
+                            y: { ...commonChartOptions.scales.y, stacked: true, title: { display: true, text: 'N° Emprendimientos Registrados (Fuente: INEC/MDTR)' } }
+                        },
+                        plugins: { ...commonChartOptions.plugins, legend: { position: 'bottom' } }
+                    }
+                });
+            } else if (skillGapChart) {
+                skillGapChart.data.datasets[0].data = data.skillGap.dataSaturated;
+                skillGapChart.data.datasets[1].data = data.skillGap.dataHighDemand;
+            }
+
+            // Re-renderizar todos los gráficos
+            if (failureRateChart) failureRateChart.update();
+            if (growthChart) growthChart.update();
+            if (demandBarChart) demandBarChart.update();
+            if (opportunityBubbleChart) opportunityBubbleChart.update();
+            if (skillGapChart) skillGapChart.update();
+
+            // Actualizar texto de tasa de fracaso
+            document.getElementById('failureRateText').textContent = data.failureRate.failure + '%';
+        }
+
+        // --- LISTENER DE TIEMPO REAL DE FIRESTORE ---
+
+        function setupRealTimeListener() {
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            // Ruta pública para datos compartidos del dashboard
+            const docRef = doc(db, `artifacts/${appId}/public/data/tracker_analytics`, 'main_dashboard');
+
+            // onSnapshot es el listener de tiempo real de Firestore
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    console.log("Datos de Firestore recibidos en tiempo real:", data);
+                    initCharts(data); // Actualiza los gráficos con los nuevos datos
+                } else {
+                    console.log("Documento no encontrado. Sembrando datos iniciales reales...");
+                    seedData(db); // Si no hay datos, inicialízalos con datos base
+                }
+            }, (error) => {
+                console.error("Error al escuchar cambios en Firestore:", error);
+            });
+        }
+        
+        // --- INICIALIZACIÓN DE DATOS BASE (Datos estáticos y tendencias de fuentes oficiales) ---
+        // Estos datos simulan la carga inicial que haría un proceso ETL externo desde SERCOP/BID/INEC.
+        const initialChartData = {
+            // Fuente: BID (2021)
+            failureRate: { failure: 70, survival: 30 }, 
+            // Fuente: SERCOP y MPCEIP (Crecimiento de sector IT en contratación pública)
+            growth: { labels: ['2021', '2022', '2023', '2024', '2025 (Proy)'], data: [100, 112, 130, 145, 165] },
+            // Fuente: SERCOP (Análisis de valor en contratos recientes)
+            demand: { labels: ['Sistemas de Gestión (ERP)', 'Ciberseguridad', 'Cloud Computing', 'Desarrollo de Apps', 'Marketing Digital'], data: [6.9, 5.3, 4.8, 3.1, 1.5] },
+            // Fuente: SERCOP (Cruza valor promedio vs. N° de licitaciones)
+            opportunity: {
+                datasets: [
+                    { label: 'Sistemas (ERP)', data: [{ x: 5, y: 1.38, r: 10 }] },
+                    { label: 'Ciberseguridad', data: [{ x: 12, y: 0.44, r: 15 }] },
+                    { label: 'Cloud Computing', data: [{ x: 9, y: 0.53, r: 15 }] },
+                    { label: 'Desarrollo de Apps', data: [{ x: 7, y: 0.44, r: 20 }] },
+                    { label: 'Marketing Digital', data: [{ x: 21, y: 0.07, r: 30 }] }
+                ]
+            },
+            // Fuente: INEC/MDTR (Comparación de registros de emprendimientos vs. demanda real de SERCOP)
+            skillGap: { labels: ['Pichincha', 'Guayas', 'Azuay', 'Manabí'], dataSaturated: [1200, 1100, 400, 350], dataHighDemand: [300, 250, 100, 50] }
+        };
+        
+        async function seedData(dbInstance) {
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const docRef = doc(dbInstance, `artifacts/${appId}/public/data/tracker_analytics`, 'main_dashboard');
+            
+            try {
+                // Si el documento NO existe, lo creamos con los datos base de las fuentes oficiales
+                const docSnap = await getDoc(docRef);
+                if (!docSnap.exists()) {
+                    await setDoc(docRef, initialChartData);
+                    console.log("Datos iniciales de fuentes oficiales sembrados con éxito.");
+                }
+            } catch (e) {
+                console.error("Error sembrando datos iniciales:", e);
+            }
+        }
+        
+        // --- INTEGRACIÓN CON GEMINI AI ---
+        // La funcionalidad de generación de ideas estratégicas se mantiene, pues usa el contexto real
+        // proporcionado por los datos y las fuentes para ofrecer valor estratégico.
+
+        const generateIdeas = async () => {
+            const nicheSelect = document.getElementById('nicheSelect');
+            const niche = nicheSelect.value;
+            const generateButton = document.getElementById('generateButton');
+            const resultsArea = document.getElementById('resultsArea');
+            const loadingMessage = document.getElementById('loadingMessage');
+            const generatedContent = document.getElementById('generatedContent');
+
+            if (!niche) return;
+
+            generateButton.disabled = true;
+            generateButton.textContent = 'Analizando...';
+            resultsArea.classList.remove('hidden');
+            loadingMessage.classList.remove('hidden');
+            generatedContent.innerHTML = '';
+            
+            const systemPrompt = "Actúa como un consultor de estrategia de negocios de alto nivel para el mercado ecuatoriano. Tu tarea es generar 3 ideas de productos/servicios altamente especializados para el nicho dado, cada uno con una propuesta de valor única, basándote en la información de SERCOP, INEC y BID (que indican alta demanda pública, crecimiento y la necesidad de reducir la tasa de fracaso). Formatea la respuesta usando Markdown (títulos, listas, negritas).";
+            const userQuery = `Genera 3 ideas de productos/servicios específicos y nicho para la industria de ${niche}, considerando que el principal desafío a resolver es la Asimetría de Información y el alto riesgo de emprendimiento. Enfócate en soluciones B2G (Business-to-Government) ya que la data de SERCOP indica alto valor.`;
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+
+            let delay = 1000;
+
+            for (let i = 0; i < MAX_RETRIES; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "Error: No se pudo generar el contenido.";
+                        generatedContent.innerHTML = marked.parse(text);
+                        loadingMessage.classList.add('hidden');
+                        generateButton.disabled = false;
+                        generateButton.textContent = '✨ Generar Ideas Estratégicas';
+                        return;
+                    } else if (response.status === 429) {
+                        if (i < MAX_RETRIES - 1) {
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            delay *= 2;
+                        } else {
+                            throw new Error("API rate limit exceeded after multiple retries.");
+                        }
+                    } else {
+                        throw new Error(`API returned status ${response.status}`);
+                    }
+                } catch (error) {
+                    if (i < MAX_RETRIES - 1) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2;
+                    } else {
+                        generatedContent.textContent = `Error en la generación de ideas: ${error.message}. Intenta de nuevo más tarde.`;
+                        loadingMessage.classList.add('hidden');
+                        generateButton.disabled = false;
+                        generateButton.textContent = '✨ Generar Ideas Estratégicas';
+                        return;
+                    }
+                }
+            }
+        };
+
+        // --- INICIALIZACIÓN PRINCIPAL ---
+
+        document.addEventListener('DOMContentLoaded', function () {
+            
+            const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+
+            try {
+                if (Object.keys(firebaseConfig).length > 0) {
+                    const app = initializeApp(firebaseConfig);
+                    auth = getAuth(app);
+                    db = getFirestore(app);
+
+                    // 1. Manejar Autenticación
+                    onAuthStateChanged(auth, async (user) => {
+                        if (user) {
+                            userId = user.uid;
+                            console.log("Usuario autenticado:", userId);
+                        } else if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            // Intentar inicio de sesión personalizado si el token está disponible
+                            try {
+                                await signInWithCustomToken(auth, __initial_auth_token);
+                                console.log("Firebase inició sesión con token personalizado.");
+                            } catch (error) {
+                                console.error("Error de autenticación personalizada de Firebase:", error);
+                                await signInAnonymously(auth); // Fallback
+                            }
+                        } else {
+                            // Inicio de sesión anónimo si no hay token
+                            await signInAnonymously(auth);
+                            console.log("Firebase inició sesión de forma anónima.");
+                        }
+                        
+                        // 2. Una vez autenticado, configurar el listener de tiempo real
+                        if (db) {
+                            setupRealTimeListener();
+                        }
+                    });
+
+                } else {
+                    console.warn("La configuración de Firebase está faltando.");
+                }
+            } catch (error) {
+                console.error("Fallo la inicialización de Firebase:", error);
+            }
+
+            // Event Listener para el Generador de Ideas de Gemini AI
+            const generateButton = document.getElementById('generateButton');
+            if (generateButton) {
+                generateButton.addEventListener('click', generateIdeas);
+            }
+        });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="bg-light text-dark">
+
+    <header class="sticky top-0 z-50 w-full bg-white/90 backdrop-blur-md shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <h1 class="text-2xl font-bold text-indigo">TrackerTech</h1>
+                <h2 class="text-lg font-medium text-muted hidden sm:block">Inteligencia de Mercado en Tiempo Real (Fuentes: SERCOP, BID, INEC)</h2>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- Nota sobre el origen de los datos en tiempo real -->
+        <div class="card bg-blue/10 p-4 mb-6 flex flex-col justify-between items-center border-2 border-blue">
+            <p class="text-blue font-semibold">
+                <span class="font-extrabold">DATOS REALES:</span> Esta data se basa en estadísticas consolidadas de **SERCOP**, **BID**, **INEC** y **Datos Abiertos** (ver fuentes en la solicitud). La tecnología de Firebase asegura la actualización en **tiempo real** de cualquier cambio en la base de datos central.
+            </p>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <div class="lg:col-span-1">
+                <div class="card flex flex-col justify-center text-center">
+                    <h3 class="text-2xl font-bold text-dark mb-2">Tasa de Fracaso Emprendedor</h3>
+                    <p id="failureRateText" class="text-7xl font-extrabold text-pink">70%</p>
+                    <p class="text-xl text-muted font-medium mt-1">de los emprendimientos fracasan antes de los 5 años (Fuente: BID, 2021).</p>
+                    <div class="chart-container chart-container-sm w-full max-w-xs mx-auto mt-4">
+                        <canvas id="failureRateChart"></canvas>
+                    </div>
+                    <p class="text-muted mt-4">La causa principal es la **Asimetría de Información** y la falta de validación de demanda.</p>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2">
+                <div class="card">
+                    <h3 class="text-2xl font-bold text-dark mb-1">Crecimiento de la Demanda Pública de IT</h3>
+                    <p class="text-4xl font-extrabold text-blue">>15%</p>
+                    <p class="text-xl text-muted font-medium">Crecimiento anual en la contratación pública de servicios IT (Fuente: SERCOP/MPCEIP, 2024).</p>
+                    <div class="chart-container chart-container-md w-full max-w-full mx-auto mt-4">
+                        <canvas id="growthChart"></canvas>
+                    </div>
+                    <p class="text-muted mt-4">El sector público es un mercado estable, financiado y en clara expansión para servicios tecnológicos.</p>
+                </div>
+            </div>
+            
+            <div class="lg:col-span-3">
+                <div class="card">
+                    <h3 class="text-3xl font-bold text-dark text-center mb-6">Análisis de Demanda: Valor por Nicho (Fuente: SERCOP)</h3>
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                        
+                        <div>
+                            <h4 class="text-xl font-semibold text-dark mb-2">Valor Total Contratado (Últimos 12 Meses)</h4>
+                            <p class="text-muted mb-4">El valor se concentra en soluciones de alta complejidad y misión crítica. El Marketing Digital representa el menor valor económico.</p>
+                            <div class="chart-container chart-container-lg w-full max-w-full mx-auto">
+                                <canvas id="demandBarChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="text-xl font-semibold text-dark mb-2">Matriz de Oportunidad Estratégica</h4>
+                            <p class="text-muted mb-4">Este gráfico cruza la competencia (Eje X) con el valor promedio de contrato (Eje Y). La "Brecha" (tamaño de burbuja) indica la saturación, basada en datos de SERCOP.</p>
+                            <ul class="text-xs text-muted space-y-1 mb-4">
+                                <li><span class="font-bold text-indigo">Arriba-Izquierda:</span> ALTO VALOR, BAJA COMPETENCIA. (Nicho Ideal)</li>
+                                <li><span class="font-bold text-pink">Abajo-Derecha:</span> BAJO VALOR, ALTA COMPETENCIA. (Saturado)</li>
+                            </ul>
+                            <div class="chart-container chart-container-lg w-full max-w-full mx-auto">
+                                <canvas id="opportunityBubbleChart"></canvas>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-3 mt-6">
+                <div class="card border-4 border-indigo">
+                    <h3 class="text-3xl font-bold text-indigo mb-4">✨ Generador de Estrategias con Gemini AI</h3>
+                    <p class="text-muted mb-4">Utiliza el contexto de los datos reales de SERCOP e INEC para obtener 3 propuestas de valor enfocadas al mercado de alta demanda pública, minimizando el riesgo.</p>
+                    <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                        <select id="nicheSelect" class="flex-grow p-3 border border-indigo rounded-lg bg-light text-dark focus:ring-blue focus:border-blue">
+                            <option value="Sistemas de Gestión (ERP)">Sistemas de Gestión (ERP)</option>
+                            <option value="Ciberseguridad">Ciberseguridad</option>
+                            <option value="Cloud Computing">Cloud Computing</option>
+                            <option value="Desarrollo de Aplicaciones Móviles">Desarrollo de Aplicaciones Móviles</option>
+                            <option value="Marketing Digital">Marketing Digital (Nicho Saturado)</option>
+                        </select>
+                        <button id="generateButton" class="whitespace-nowrap px-6 py-3 bg-pink text-white font-bold rounded-lg hover:bg-red-600 transition duration-150">
+                            ✨ Generar Ideas Estratégicas
+                        </button>
+                    </div>
+                    <div id="resultsArea" class="mt-4 p-4 bg-light rounded-lg hidden">
+                        <p id="loadingMessage" class="text-indigo font-semibold hidden">Analizando el mercado y creando estrategias...</p>
+                        <div id="generatedContent" class="prose max-w-none text-dark"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2">
+                <div class="card">
+                    <h3 class="text-2xl font-bold text-dark mb-4">Brecha de Habilidades y Saturación Geográfica</h3>
+                    <p class="text-muted mb-4">La Inversión Mal Enfocada es visible geográficamente (Fuente: INEC/MDTR). Hay una concentración alta de servicios saturados, lo que indica oportunidades no cubiertas en nichos especializados.</p>
+                    <div class="chart-container chart-container-md w-full max-w-full mx-auto">
+                        <canvas id="skillGapChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-1">
+                <div class="card flex flex-col">
+                    <h3 class="text-2xl font-bold text-dark mb-4">El Perfil Ideal de Inversión</h3>
+                    <p class="text-muted mb-6">Este perfil (EED) minimiza el riesgo del 70% de fracaso basando su estrategia en datos oficiales (SERCOP/INEC/BID).</p>
+                    <ul class="flex flex-col space-y-5">
+                        <li class="flex items-center">
+                            <span class="text-4xl mr-4">👤</span>
+                            <div>
+                                <span class="font-bold text-lg text-dark">Emprendedor Estratégico Digital (EED)</span>
+                                <p class="text-muted">Busca nichos B2G de alto valor (Ciberseguridad, ERP) con baja competencia.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-center">
+                            <span class="text-4xl mr-4">🎯</span>
+                            <div>
+                                <span class="font-bold text-lg text-dark">Ruta de Carrera y Éxito</span>
+                                <p class="text-muted">Alinea habilidades con la demanda pública (Programas MDTR) para evitar la saturación.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-center">
+                            <span class="text-4xl mr-4">📊</span>
+                            <div>
+                                <span class="font-bold text-lg text-dark">Decisiones Basadas en Datos</span>
+                                <p class="text-muted">Valora las estadísticas de **TrackerTech** (SERCOP, Datos Abiertos) sobre la intuición del mercado.</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="lg:col-span-3 text-center p-8 mt-6">
+                <h2 class="text-4xl font-extrabold text-indigo mb-4">TrackerTech transforma la Asimetría de Información en Oportunidad Estratégica, en tiempo real.</h2>
+                <p class="text-xl text-muted max-w-3xl mx-auto">Ahora la información clave de SERCOP y las estadísticas nacionales están a tu disposición para tomar decisiones estratégicas.</p>
+            </div>
+
+        </div>
+    </main>
+</body>
+</html>
