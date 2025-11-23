@@ -317,33 +317,43 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 }
 
 
-// 4. Gráfico de Burbujas de Oportunidad
+// 4. Gráfico Scatter de Oportunidad (versión mejorada)
 if (data.opportunity) {
     const ctxOpportunity = document.getElementById('opportunityBubbleChart');
 
-    // Construcción correcta del dataset para bubble chart
-    const datasetsWithColors = data.opportunity.datasets.map(d => ({
+    // Construcción correcta del dataset para scatter
+    const datasetsScatter = data.opportunity.datasets.map(d => ({
         label: d.label,
-        backgroundColor:
-            d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
-            d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
-            d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
-            d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
-            'rgba(255, 45, 85, 0.7)',
+        borderColor:
+            d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 1)' :
+            d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 1)' :
+            d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 1)' :
+            d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 1)' :
+            'rgba(255, 45, 85, 1)',
 
-        // Aseguramos que la estructura sea la requerida por bubble chart
+        backgroundColor:
+            d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.5)' :
+            d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.5)' :
+            d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.5)' :
+            d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.5)' :
+            'rgba(255, 45, 85, 0.5)',
+
+        // scatter: solo x e y
         data: d.data.map(p => ({
             x: Number(p.x),
             y: Number(p.y),
-            r: Number(p.r) || 5  // tamaño mínimo para evitar burbujas invisibles
-        }))
+            // Opcional: si quieres usar r como tamaño del punto
+            pointRadius: p.r ? Math.max(4, Number(p.r)) : 6  
+        })),
+        showLine: false,
+        pointStyle: 'circle'
     }));
 
     if (ctxOpportunity && !opportunityBubbleChart) {
         opportunityBubbleChart = new Chart(ctxOpportunity, {
-            type: 'bubble',
+            type: 'scatter',
             data: {
-                datasets: datasetsWithColors
+                datasets: datasetsScatter
             },
             options: {
                 ...commonChartOptions,
@@ -367,7 +377,9 @@ if (data.opportunity) {
                 },
                 plugins: {
                     ...commonChartOptions.plugins,
-                    legend: { position: 'bottom' },
+                    legend: {
+                        position: 'bottom'
+                    },
                     tooltip: {
                         callbacks: {
                             title: (items) => items[0].dataset.label,
@@ -376,7 +388,7 @@ if (data.opportunity) {
                                 return [
                                     `Contratos: ${d.x}`,
                                     `Valor Prom.: $${d.y.toFixed(2)}M`,
-                                    `Brecha: ${d.r}`
+                                    d.pointRadius ? `Brecha: ${d.pointRadius}` : '' // opcional
                                 ];
                             }
                         }
@@ -384,8 +396,9 @@ if (data.opportunity) {
                 }
             }
         });
+
     } else if (opportunityBubbleChart) {
-        opportunityBubbleChart.data.datasets = datasetsWithColors;
+        opportunityBubbleChart.data.datasets = datasetsScatter;
         opportunityBubbleChart.update();
     }
 
@@ -393,10 +406,9 @@ if (data.opportunity) {
     console.warn("Datos de Oportunidad (opportunity) faltantes.");
 }
 
-
             
             
-                        // 5. Gráfico de Brecha de Habilidades (Stacked Bar)
+// 5. Gráfico de Brecha de Habilidades (Stacked Bar)
             if (data.skillGap) {
                 const ctxSkillGap = document.getElementById('skillGapChart');
                 if (ctxSkillGap && !skillGapChart) {
