@@ -317,39 +317,48 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 }
 
 
-// 4. Gráfico de Oportunidad (Scatter mejorado, reemplaza al bubble original)
+// 4. Gráfico de Oportunidad (Scatter con columnas y burbujas grandes)
 if (data.opportunity) {
     const ctxOpportunity = document.getElementById('opportunityBubbleChart');
 
-    // Función para escalar el tamaño visual del punto (r viene de la fuente)
-    const scalePointSize = (r) => {
-        const n = Number(r) || 0;
-        // Escalado no lineal y límites para que no queden puntos gigantes ni invisibles
-        return Math.max(4, Math.min(Math.round(Math.sqrt(n) * 6), 36));
+    // columnas fijas por categoría
+    const categoryX = {
+        'Sistemas': 1,
+        'Ciberseguridad': 2,
+        'Cloud Computing': 3,
+        'Desarrollo de Apps': 4,
+        'Marketing Digital': 5
     };
 
-    // Construir datasets para scatter (x = # licitaciones, y = valor promedio, optional r -> tamaño)
+    // Escalado agresivo para burbujas visibles
+    const scalePointSize = (r) => {
+        const n = Number(r) || 1;
+        return Math.min(60, Math.max(12, n * 8)); 
+    };
+
     const datasetsScatter = data.opportunity.datasets.map(d => {
         const label = String(d.label || '');
+
+        const category = Object.keys(categoryX).find(c => label.includes(c));
+        const xColumn = categoryX[category] || 0;
+
         const borderColor =
-            label.includes('Sistemas') ? 'rgba(94, 92, 230, 1)' :
-            label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 1)' :
-            label.includes('Cloud') ? 'rgba(0, 122, 255, 1)' :
-            label.includes('Desarrollo') ? 'rgba(90, 200, 250, 1)' :
-            'rgba(255, 45, 85, 1)';
+            label.includes('Sistemas') ? 'rgba(94,92,230,1)' :
+            label.includes('Ciberseguridad') ? 'rgba(175,82,222,1)' :
+            label.includes('Cloud') ? 'rgba(0,122,255,1)' :
+            label.includes('Desarrollo') ? 'rgba(90,200,250,1)' :
+            'rgba(255,45,85,1)';
 
-        const backgroundColor = borderColor.replace(', 1)', ', 0.45)');
+        const backgroundColor = borderColor.replace(',1)', ',0.45)');
 
-        // Aseguramos estructura de datos y conversión numérica
         const points = (Array.isArray(d.data) ? d.data : []).map(p => {
-            const x = Number(p.x);
             const y = Number(p.y);
             const r = Number(p.r);
+
             return {
-                x: isFinite(x) ? x : 0,
+                x: xColumn,                // <-- ahora cada categoría tiene su propia columna
                 y: isFinite(y) ? y : 0,
-                // guardamos r original para tooltip y escalamos para el tamaño real
-                _r: isFinite(r) ? r : 0,
+                _r: r,
                 pointRadius: scalePointSize(r)
             };
         });
@@ -370,61 +379,51 @@ if (data.opportunity) {
             data: { datasets: datasetsScatter },
             options: {
                 ...commonChartOptions,
-                interaction: { mode: 'nearest', axis: 'xy', intersect: false },
                 scales: {
                     x: {
-                        ...commonChartOptions.scales.x,
-                        title: { display: true, text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)' },
-                        beginAtZero: true,
-                        ticks: { precision: 0 }
+                        title: { display: true, text: 'Categorías (Columnas por Sector)' },
+                        ticks: {
+                            callback: function (value) {
+                                return {
+                                    1: 'Sistemas',
+                                    2: 'Ciberseguridad',
+                                    3: 'Cloud',
+                                    4: 'Apps',
+                                    5: 'Marketing'
+                                }[value] || value;
+                            }
+                        },
+                        min: 0.5,
+                        max: 5.5
                     },
                     y: {
-                        ...commonChartOptions.scales.y,
                         title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' },
                         beginAtZero: true
                     }
                 },
                 plugins: {
-                    ...commonChartOptions.plugins,
                     legend: { position: 'bottom' },
                     tooltip: {
-                        ...commonChartOptions.plugins.tooltip,
                         callbacks: {
-                            title: (items) => items[0]?.dataset?.label || '',
-                            label: (context) => {
-                                const p = context.raw;
-                                // p._r es el valor original de "brecha", p.pointRadius es tamaño visual
-                                const lines = [
-                                    `Contratos (N° licitaciones): ${p.x}`,
-                                    `Valor Prom.: $${(Number(p.y) || 0).toFixed(2)}M`
+                            title: items => items[0].dataset.label,
+                            label: (ctx) => {
+                                const p = ctx.raw;
+                                return [
+                                    `Valor Prom.: $${p.y.toFixed(2)}M`,
+                                    `Brecha: ${p._r}`
                                 ];
-                                if (p._r != null) lines.push(`Brecha (indicador): ${p._r}`);
-                                return lines;
                             }
                         }
-                    }
-                },
-                // personalizaciones visuales para que puntos no se superpongan excesivamente
-                elements: {
-                    point: {
-                        hoverRadius: 10,
-                        hoverBorderWidth: 2
                     }
                 }
             }
         });
-
-        console.log('Scatter de Oportunidad creado correctamente.');
-
     } else if (opportunityBubbleChart) {
-        // Actualizar datos de manera segura (mantener opciones ya inicializadas)
         opportunityBubbleChart.data.datasets = datasetsScatter;
         opportunityBubbleChart.update();
-        console.log('Scatter de Oportunidad actualizado correctamente.');
     }
-} else {
-    console.warn("Datos de Oportunidad (opportunity) faltantes.");
 }
+
 
             
             
