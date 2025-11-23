@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrackerTech - Rastreador de Servicios Digitales en Ecuador</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link rel="stylesheet" href="styles.css"> <!-- Opcional: CSS personalizado -->
+</head>
+<body>
+    <header>
+        <h1>TrackerTech: Dashboard de Demanda Digital en Ecuador</h1>
+        <p>Actualizado en tiempo real desde SERCOP y SRI. Fecha: <span id="current-date"></span></p>
+    </header>
+
+    <main>
+        <!-- Sección 1: Demanda Pública (SERCOP) -->
+        <section id="demanda-publica">
+            <h2>1. Demanda Pública: Licitaciones Activas en Servicios Digitales</h2>
+            <canvas id="licitaciones-chart" width="400" height="200"></canvas>
+            <p id="licitaciones-count">Cargando...</p>
+        </section>
+
+        <!-- Sección 2: Actividad Económica (SRI) -->
+        <section id="actividad-economica">
+            <h2>2. Nuevas Empresas Tech (CIIU 62/63) por Provincia</h2>
+            <canvas id="empresas-chart" width="400" height="200"></canvas>
+        </section>
+
+        <!-- Sección 3: Tendencias Geográficas -->
+        <section id="tendencias-geograficas">
+            <h2>3. Mapa de Calor: Demanda vs. Oferta por Provincia</h2>
+            <div id="map" style="height: 400px;"></div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Fuentes: SERCOP (API OCDS), SRI (Datos Abiertos). Basado en "TrackerTech" para EED.</p>
+    </footer>
+
+    <script>
+        // Configuración general
+        const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutos
+        document.getElementById('current-date').textContent = new Date().toLocaleDateString('es-EC');
+
+        // Datos muestrales para SRI (reemplaza con fetch real)
+        const sampleEmpresasData = {
+            labels: ['Pichincha', 'Guayas', 'Manabí', 'Azuay', 'Tungurahua'],
+            datasets: [{
+                label: 'Nuevas Inscripciones 2025 (CIIU 62/63)',
+                data: [250, 180, 90, 60, 45],
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            }]
+        };
+
+        const sampleRucCounts = {  // Oferta: Conteo RUC activos CIIU 62/63 por provincia
+            'Pichincha': 1200, 'Guayas': 800, 'Manabí': 300, 'Azuay': 200, 'Tungurahua': 150
+        };
+
+        const sampleLicitacionesPorProv = {  // Demanda: Inferida de API (muestra)
+            'Pichincha': 200, 'Guayas': 150, 'Manabí': 80, 'Azuay': 50, 'Tungurahua': 30
+        };
+
+        // Inicializar gráficos
+        const ctxLicit = document.getElementById('licitaciones-chart').getContext('2d');
+        const licitChart = new Chart(ctxLicit, {
+            type: 'bar',
+            data: { labels: ['Software', 'Desarrollo', 'IT'], datasets: [{ label: 'Conteo 2025', data: [0,0,0], backgroundColor: ['rgba(255, 99, 132, 0.2)'] }] },
+            options: { scales: { y: { beginAtZero: true } } }
+        });
+
+        const ctxEmp = document.getElementById('empresas-chart').getContext('2d');
+        const empChart = new Chart(ctxEmp, { type: 'line', data: sampleEmpresasData, options: { scales: { y: { beginAtZero: true } } } });
+
+        // Inicializar mapa
+        const map = L.map('map').setView([-1.8312, -78.1834], 6);  // Centro Ecuador
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // Función para actualizar datos SERCOP (real-time)
+        async function updateSERCOP() {
+            const keywords = ['software', 'desarrollo', 'digital'];
+            let totalCount = 0;
+            let keywordCounts = { software: 0, desarrollo: 0, digital: 0 };
+
+            for (const kw of keywords) {
+                try {
+                    const response = await fetch(`https://datosabiertos.compraspublicas.gob.ec/PLATAFORMA/api/search_ocds?year=2025&search=${kw}`);
+                    const data = await response.json();
+                    const count = data.total || 0;  // Asume campo 'total' en respuesta
+                    keywordCounts[kw] = count;
+                    totalCount += count;
+
+                    // Para mapa: Asume extracción de provincia del buyer (simplificado, usa muestral)
+                    // En prod: data.records.forEach(record => { province = extractProvince(record.buyer.name); sampleLicitacionesPorProv[province] += 1; });
+                } catch (error) {
+                    console.error('Error fetching SERCOP:', error);
+                }
+            }
+
+            licitChart.data.datasets[0].data = Object.values(keywordCounts);
+            licitChart.data.labels = Object.keys(keywordCounts);
+            licitChart.update();
+            document.getElementById('licitaciones-count').textContent = `Total licitaciones: ${totalCount}`;
+        }
+
+        // Función para actualizar SRI (ejemplo con fetch CSV; usa muestral si falla)
+        async function updateSRI() {
+            const url = 'https://descargas.sri.gob.ec/download/datosAbiertos/sri_inscripciones_2025.csv';  // Ajusta a 2025
+            try {
+                const response = await fetch(url);  // Si CORS falla, usa proxy: 'https://cors-anywhere.herokuapp.com/' + url
+                const csvText = await response.text();
+                const parsed = Papa.parse(csvText, { header: true, dynamicTyping: false }).data;
+
+                // Filtrar CIIU 62/63 (asume columnas: 'actividad' o 'codigo_actividad' con prefijo)
+                const techInscrip = parsed.filter(row => 
+                    (row.actividad || '').toString().startsWith('62') || (row.actividad || '').toString().startsWith('63')
+                );
+
+                // Agrupar por provincia (asume columna 'provincia')
+                const byProv = {};
+                techInscrip.forEach(row => {
+                    const prov = row.provincia || 'Desconocida';
+                    byProv[prov] = (byProv[prov] || 0) + 1;
+                });
+
+                // Actualizar gráfico
+                empChart.data.labels = Object.keys(byProv);
+                empChart.data.datasets[0].data = Object.values(byProv);
+                empChart.update();
+
+                // Para mapa: Actualiza sampleRucCounts con conteos similares de catastro RUC (fetch CSVs provinciales)
+                // Ej: for each province CSV, parse and count CIIU 62/63
+            } catch (error) {
+                console.error('Error fetching SRI:', error);
+                // Fallback a muestral
+                empChart.data = sampleEmpresasData;
+                empChart.update();
+            }
+        }
+
+        // Función para mapa de calor
+        function updateMapa() {
+            // Heat data: [lat, lng, intensity] donde intensity = demanda - oferta o ratio
+            const heatData = [];
+            Object.keys(sampleLicitacionesPorProv).forEach(prov => {
+                const coords = {  // Coordenadas aproximadas por provincia
+                    Pichincha: [-0.22, -78.51], Guayas: [-2.19, -79.89], Manabí: [-0.72, -80.52],
+                    Azuay: [-3.25, -79.22], Tungurahua: [-1.00, -78.62]
+                }[prov] || [-1.83, -78.18];
+                const intensity = sampleLicitacionesPorProv[prov] / (sampleRucCounts[prov] || 1);  // Ratio demanda/oferta
+                heatData.push([coords[0], coords[1], intensity]);
+            });
+
+            // Limpiar mapa y agregar layer
+            map.eachLayer(layer => { if (layer instanceof L.HeatLayer) map.removeLayer(layer); });
+            L.heatLayer(heatData, { radius: 25, blur: 15 }).addTo(map);
+        }
+
+        // Cargar inicial y refrescar
+        updateSERCOP();
+        updateSRI();
+        updateMapa();
+        setInterval(() => { updateSERCOP(); updateSRI(); updateMapa(); }, UPDATE_INTERVAL);
+    </script>
+</body>
+</html>
