@@ -318,79 +318,92 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 }
 
 
-            // 4. Gráfico de Oportunidad (Scatter mejorado)
+           // 4. Gráfico de Burbujas de Oportunidad
 if (data.opportunity) {
     const ctxOpportunity = document.getElementById('opportunityBubbleChart');
+    // Define las medias de referencia para los cuadrantes (ajustar según tu cálculo real)
+    const mediaX = 25; 
+    const mediaY = 1.5;
 
-    // Escala para tamaño del punto (r)
-    const scalePointSize = (r) => Math.max(6, Math.min(r * 3, 40));
-
-    // Asignar colores basados en categoría
+    // Asignar colores basados en la etiqueta del dataset
     const datasetsWithColors = data.opportunity.datasets.map(d => ({
-        label: d.label,
-        data: d.data.map(p => ({
-            x: p.x,
-            y: p.y,
-            r: scalePointSize(p.r)  // nuevo tamaño de punto
-        })),
-        backgroundColor:
-            d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.8)' :
-            d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.8)' :
-            d.label.includes('Cloud') ? 'rgba(0, 122, 255, 0.8)' :
-            d.label.includes('Desarrollo') ? 'rgba(90, 200, 250, 0.8)' :
-            'rgba(255, 45, 85, 0.8)',
-
-        pointRadius: (ctx) => ctx.raw.r,
-        pointHoverRadius: (ctx) => ctx.raw.r + 4
+        ...d,
+        backgroundColor: d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
+                         d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
+                         d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
+                         d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
+                         'rgba(255, 45, 85, 0.7)' // Marketing Digital
     }));
 
     if (ctxOpportunity && !opportunityBubbleChart) {
         opportunityBubbleChart = new Chart(ctxOpportunity, {
-            type: 'scatter',
+            type: 'bubble', // Mantenemos bubble
             data: {
                 datasets: datasetsWithColors
             },
             options: {
                 ...commonChartOptions,
-                scales: {
-                    x: {
-                        ...commonChartOptions.scales.x,
-                        title: { display: true, text: 'N° de Licitaciones (Competencia - SERCOP)' },
-                        beginAtZero: true,
-                    },
-                    y: {
-                        ...commonChartOptions.scales.y,
-                        title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' },
-                        beginAtZero: true
-                    }
-                },
+                // Título del Gráfico
                 plugins: {
-                    ...commonChartOptions.plugins,
+                    ...commonChartOptions.plugins, 
                     legend: { position: 'bottom' },
                     tooltip: {
+                        ...commonChartOptions.plugins.tooltip,
                         callbacks: {
-                            title: (items) => items[0].dataset.label,
+                            title: (tooltipItems) => tooltipItems[0].dataset.label,
                             label: (context) => {
-                                const p = context.raw;
-                                return [
-                                    `Contratos: ${p.x}`,
-                                    `Valor Prom.: $${p.y.toFixed(2)}M`,
-                                    `Brecha (tamaño): ${p.r}`
-                                ];
+                                const d = context.raw;
+                                return `Contratos: ${d.x} | Valor Prom.: $${d.y.toFixed(2)}M | Brecha: ${d.r}`;
                             }
+                        }
+                    },
+                    // **Opcional: Añadir anotaciones para los cuadrantes (Requiere chartjs-plugin-annotation)**
+                    // Si no usas el plugin, se puede dibujar con afterDraw
+                },
+                scales: {
+                    x: {
+                        ...commonChartOptions.scales.x, 
+                        title: { display: true, text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)' },
+                        // **Línea de Referencia Vertical para el Cuadrante**
+                        // Esta línea divide Alta vs Baja Competencia
+                        border: {
+                            display: true,
+                        },
+                        grid: {
+                            // Dibuja la línea en el valor de la media
+                            drawOnChartArea: true,
+                            color: (context) => context.tick.value === mediaX ? 'rgba(255, 99, 132, 1)' : commonChartOptions.scales.x.grid.color,
+                            lineWidth: (context) => context.tick.value === mediaX ? 2 : commonChartOptions.scales.x.grid.lineWidth
+                        }
+                    },
+                    y: {
+                        ...commonChartOptions.scales.y, 
+                        title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' },
+                        // **Línea de Referencia Horizontal para el Cuadrante**
+                        // Esta línea divide Alta vs Baja Rentabilidad
+                        border: {
+                            display: true,
+                        },
+                        grid: {
+                            drawOnChartArea: true,
+                            color: (context) => context.tick.value === mediaY ? 'rgba(75, 192, 192, 1)' : commonChartOptions.scales.y.grid.color,
+                            lineWidth: (context) => context.tick.value === mediaY ? 2 : commonChartOptions.scales.y.grid.lineWidth
                         }
                     }
                 }
             }
         });
     } else if (opportunityBubbleChart) {
+        // Actualiza las escalas si las medias cambian dinámicamente
+        opportunityBubbleChart.options.scales.x.grid.color = (context) => context.tick.value === mediaX ? 'rgba(255, 99, 132, 1)' : commonChartOptions.scales.x.grid.color;
+        opportunityBubbleChart.options.scales.x.grid.lineWidth = (context) => context.tick.value === mediaX ? 2 : commonChartOptions.scales.x.grid.lineWidth;
+        opportunityBubbleChart.options.scales.y.grid.color = (context) => context.tick.value === mediaY ? 'rgba(75, 192, 192, 1)' : commonChartOptions.scales.y.grid.color;
+        opportunityBubbleChart.options.scales.y.grid.lineWidth = (context) => context.tick.value === mediaY ? 2 : commonChartOptions.scales.y.grid.lineWidth;
+
         opportunityBubbleChart.data.datasets = datasetsWithColors;
         opportunityBubbleChart.update();
     }
-
-} else {
-    console.warn("Datos de Oportunidad (opportunity) faltantes.");
-}
+} else { console.warn("Datos de Oportunidad (opportunity) faltantes."); }
 
             
             
