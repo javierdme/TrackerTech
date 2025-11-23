@@ -318,93 +318,200 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 
 
 
-// === 4. Gráfico de Burbujas Mejorado ===
-if (data.opportunity) {
-    const ctxOpportunity = document.getElementById("opportunityBubbleChart");
-
-    // 1) Mapa fijo de posiciones X por categoría (columnas separadas)
-    const categoryX = {
-        "Sistemas (ERP)": 1,
-        "Ciberseguridad": 2,
-        "Cloud Computing": 3,
-        "Desarrollo de Apps": 4,
-        "Marketing Digital": 5
-    };
-
-    // 2) Offset vertical para evitar alineación
-    function addVerticalOffset(baseY, index) {
-        const offset = (index * 0.05); // separa burbujas sin distorsionar
-        return baseY + offset;
-    }
-
-    // 3) Reprocesar datasets
-    const processedDatasets = data.opportunity.datasets.map((d, index) => {
-        return {
-            ...d,
-            data: d.data.map((p, i) => ({
-                x: categoryX[d.label] ?? (i + 1),  // columna fija según categoría
-                y: addVerticalOffset(p.y, i),      // separador vertical
-                r: Math.max(8, Math.min(p.r, 45))  // normalizar tamaño burbuja
-            })),
-            backgroundColor:
-                d.label.includes("Sistemas") ? "rgba(94, 92, 230, 0.7)" :
-                d.label.includes("Ciberseguridad") ? "rgba(175, 82, 222, 0.7)" :
-                d.label.includes("Cloud") ? "rgba(0, 122, 255, 0.7)" :
-                d.label.includes("Apps") ? "rgba(90, 200, 250, 0.7)" :
-                "rgba(255, 45, 85, 0.7)"
-        };
-    });
-
-    if (ctxOpportunity && !opportunityBubbleChart) {
-        opportunityBubbleChart = new Chart(ctxOpportunity, {
-            type: "bubble",
-            data: { datasets: processedDatasets },
-            options: {
-                ...commonChartOptions,
-                scales: {
-                    x: {
-                        ...commonChartOptions.scales.x,
-                        ticks: {
-                            callback: function(value) {
-                                const labels = Object.keys(categoryX);
-                                return labels[value - 1] || "";
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: "Sector (Columnas Separadas)"
-                        },
-                        min: 0.5,
-                        max: 5.5
-                    },
-                    y: {
-                        ...commonChartOptions.scales.y,
-                        title: {
-                            display: true,
-                            text: "Valor Promedio Contrato (Millones USD)"
-                        }
-                    }
-                },
-                plugins: {
-                    ...commonChartOptions.plugins,
-                    legend: { position: "bottom" },
-                    tooltip: {
-                        callbacks: {
-                            title: (items) => items[0].dataset.label,
-                            label: (context) => {
-                                const d = context.raw;
-                                return `Contratos: ${d.x} | Valor Prom.: $${d.y.toFixed(2)}M | Brecha: ${d.r}`;
-                            }
-                        }
-                    }
+            // 4. Gráfico de Burbujas de Oportunidad - VERSIÓN MEJORADA (sin superposiciones)
+            if (data.opportunity && data.opportunity.datasets) {
+                const ctxOpportunity = document.getElementById('opportunityBubbleChart');
+                if (!ctxOpportunity) {
+                    console.error("[BUBBLE CHART] Canvas no encontrado");
+                    return;
                 }
+
+                // Registrar plugin datalabels una sola vez
+                if (typeof ChartDataLabels !== 'undefined' && !Chart.registry.plugins.get('datalabels')) {
+                    Chart.register(ChartDataLabels);
+                }
+
+                // Mapa de colores por nicho
+                const colorMap = {
+                    'Sistemas': 'rgba(94, 92, 230, 0.85)',
+                    'Ciberseguridad': 'rgba(175, 82, 222, 0.85)',
+                    'Cloud Computing': 'rgba(0, 122, 255, 0.85)',
+                    'Desarrollo de Apps': 'rgba(90, 200, 250, 0.85)',
+                    'Marketing Digital': 'rgba(255, 45, 85, 0.85)'
+                };
+
+                // Función para evitar superposiciones: jitter vertical controlado
+                const applyJitter = (datasets) => {
+                    const points = [];
+                    datasets.forEach(ds => {
+                        ds.data.forEach(point => {
+                            points.push({
+                                x: point.x,
+                                y: point.y,
+                                r: point.r,
+                                label: ds.label,
+                                originalY: point.y,
+                                dataset: ds
+                            });
+                        });
+                    });
+
+                    // Ordenar por X para detectar colisiones
+                    points.sort((a, b) => a.x - b.x);
+
+                    const jitterAmount = 0.08; // Ajusta este valor: 0.05 = sutil, 0.15 = muy separado
+                    const minDistanceX = 3; // Si dos puntos están a menos de X licitaciones, aplicar jitter
+
+                    for (let i = 0; i < points.length; i++) {
+                        for (let j = i + 1; j < points.length; j++) {
+                            if (Math.abs(points[i].x - points[j].x) < minDistanceX) {
+                                const offset = jitterAmount * (j - i);
+                                points[j].y = points[j].originalY + offset;
+                                points[i].y = points[i].originalY - offset * 0.5;
+                            }
+                        }
+                    }
+
+                    // Reconstruir datasets
+                    return datasets.map(ds => {
+                        const originalLabel = ds.label;
+                        const colorKey = originalLabel.includes('Marketing') ? 'Marketing Digital' : originalLabel.split(' ')[0];
+                        const color = colorMap[colorKey] || 'rgba(150, 150, 150, 0.8)';
+
+                        const newData = ds.data.map((point, idx) => {
+                            const matched = points.find(p => 
+                                p.label === originalLabel && 
+                                p.originalY === point.y &&
+                                p.x === point.x
+                            );
+                            return {
+                                x: point.x,
+                                y: matched ? matched.y : point.y,
+                                r: point.r || 15,
+                                originalY: point.y // Guardar valor real
+                            };
+                        });
+
+                        return {
+                            ...ds,
+                            data: newData,
+                            backgroundColor: color,
+                            borderColor: color.replace('0.85', '1'),
+                            borderWidth: 3,
+                            hoverBorderWidth: 5,
+                            pointStyle: 'circle'
+                        };
+                    });
+                };
+
+                const processedDatasets = applyJitter(data.opportunity.datasets);
+
+                if (!opportunityBubbleChart) {
+                    opportunityBubbleChart = new Chart(ctxOpportunity, {
+                        type: 'bubble',
+                        data: { datasets: processedDatasets },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                    labels: {
+                                        font: { family: 'Inter', size: 13, weight: '600' },
+                                        color: PALETTE.textDark,
+                                        usePointStyle: true,
+                                        pointStyle: 'circle',
+                                        padding: 20
+                                    }
+                                },
+                                tooltip: {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                                    titleColor: '#fff',
+                                    bodyColor: '#fff',
+                                    borderColor: '#555',
+                                    borderWidth: 1,
+                                    cornerRadius: 8,
+                                    displayColors: false,
+                                    callbacks: {
+                                        title: (items) => items[0].dataset.label,
+                                        label: (context) => {
+                                            const d = context.raw;
+                                            const realValue = d.originalY?.toFixed(2) || d.y.toFixed(2);
+                                            return [
+                                                `   Licitaciones: ${d.x}`,
+                                                `   Valor promedio real: $${realValue}M`,
+                                                `   Brecha de mercado: ${d.r} (más grande = más saturado)`,
+                                                `   (Separación visual aplicada para claridad)`
+                                            ];
+                                        }
+                                    }
+                                },
+                                datalabels: {
+                                    display: true,
+                                    color: '#FFFFFF',
+                                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                                    borderRadius: 6,
+                                    padding: 8,
+                                    font: {
+                                        weight: 'bold',
+                                        size: 11,
+                                        family: 'Inter'
+                                    },
+                                    formatter: (value, ctx) => {
+                                        const label = ctx.dataset.label || '';
+                                        const short = label.split(' (')[0];
+                                        return short.length > 18 ? short.substring(0, 15) + '...' : short;
+                                    },
+                                    anchor: 'center',
+                                    align: 'center'
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'N° de Licitaciones (Competencia ↑)',
+                                        font: { family: 'Inter', size: 14, weight: 'bold' },
+                                        color: PALETTE.textDark
+                                    },
+                                    beginAtZero: true,
+                                    ticks: { 
+                                        stepSize: 5,
+                                        font: { family: 'Inter' }
+                                    },
+                                    grid: { color: '#E5E5EA' }
+                                },
+                                y: {
+                                    title: {
+                                        display: true,
+                                        text: 'Valor Promedio por Contrato (Millones USD ↑)',
+                                        font: { family: 'Inter', size: 14, weight: 'bold' },
+                                        color: PALETTE.textDark
+                                    },
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: (value) => `$${value.toFixed(1)}M`,
+                                        font: { family: 'Inter' }
+                                    },
+                                    grid: { color: '#E5E5EA' }
+                                }
+                            },
+                            animation: {
+                                duration: 1500,
+                                easing: 'easeOutQuart'
+                            }
+                        },
+                        plugins: [ChartDataLabels]
+                    });
+
+                    console.log("Gráfico de Burbujas creado con separación vertical inteligente");
+                } else {
+                    opportunityBubbleChart.data.datasets = processedDatasets;
+                    opportunityBubbleChart.update('active');
+                }
+            } else {
+                console.warn("Datos de opportunity faltantes o mal formados");
             }
-        });
-    } else {
-        opportunityBubbleChart.data.datasets = processedDatasets;
-        opportunityBubbleChart.update();
-    }
-}
 
 
 
