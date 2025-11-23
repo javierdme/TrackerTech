@@ -318,140 +318,118 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 
 
 
-            // 4. Gráfico de Burbujas de Oportunidad - VERSIÓN CORREGIDA Y OPTIMIZADA
-            if (data.opportunity && data.opportunity.datasets) {
-                const ctxOpportunity = document.getElementById('opportunityBubbleChart');
-                if (!ctxOpportunity) {
-                    console.error("[BUBBLE CHART] Canvas no encontrado: #opportunityBubbleChart");
-                    return;
-                }
+// 4. Gráfico de Burbujas de Oportunidad (Separado por Columnas Verticales)
+if (data.opportunity) {
+    const ctxOpportunity = document.getElementById('opportunityBubbleChart');
+    
+    // 1. Definir etiquetas y preparar datos
+    // Estas etiquetas se usarán como las columnas en el eje X
+    const categoryLabels = data.opportunity.datasets.map(d => d.label);
+    
+    // Rango de desplazamiento vertical (Jitter) para evitar superposición en el eje Y
+    const jitterRange = 0.05; 
 
-                // Registrar el plugin datalabels UNA SOLA VEZ (mejor aquí si solo se usa en este gráfico)
-                if (typeof ChartDataLabels !== 'undefined' && !Chart.registry.plugins.get('datalabels')) {
-                    Chart.register(ChartDataLabels);
-                }
+    const datasetsWithColorsAndAdjustedData = data.opportunity.datasets.map((d, index) => {
+        
+        // Asumimos que d.data tiene un solo punto (objeto {x, y, r}) o un array con un punto.
+        const originalPoint = Array.isArray(d.data) && d.data.length > 0 ? d.data[0] : d.data;
 
-                // Asignar colores consistentes por categoría
-                const colorMap = {
-                    'Sistemas': 'rgba(94, 92, 230, 0.8)',      // Indigo
-                    'Ciberseguridad': 'rgba(175, 82, 222, 0.8)', // Purple
-                    'Cloud Computing': 'rgba(0, 122, 255, 0.8)', // Blue
-                    'Desarrollo de Apps': 'rgba(90, 200, 250, 0.8)', // Light Blue
-                    'Marketing Digital': 'rgba(255, 45, 85, 0.8)'   // Pink
-                };
+        if (!originalPoint || typeof originalPoint.x === 'undefined') {
+            console.warn(`Punto de dato inválido o faltante para la categoría: ${d.label}`);
+            return d; 
+        }
+        
+        // *** CAMBIO CLAVE 1: JITTER EN EL EJE Y PARA SEPARACIÓN VERTICAL ***
+        // Añade un pequeño desplazamiento aleatorio al Valor Promedio
+        const jitterY = (Math.random() - 0.5) * jitterRange;
+        
+        const adjustedData = [{
+            x: index,                       // Posición Horizontal: El índice define la columna (categoría)
+            y: originalPoint.y + jitterY,   // Posición Vertical: Valor Promedio + Jitter
+            r: originalPoint.x,             // Tamaño de la Burbuja: Usamos el N° de Licitaciones (d.x original)
+            // Almacenamos valores originales para el Tooltip
+            originalY: originalPoint.y,
+            originalBrecha: originalPoint.r 
+        }];
+        
+        // Asignación de colores (sin cambios)
+        const backgroundColor = d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
+                                d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
+                                d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
+                                d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
+                                'rgba(255, 45, 85, 0.7)';
+        
+        return {
+            ...d,
+            data: adjustedData,
+            backgroundColor: backgroundColor
+        };
+    });
 
-                const processedDatasets = data.opportunity.datasets.map(dataset => {
-                    const label = dataset.label;
-                    let color = colorMap[label.split(' ')[0]] || 'rgba(100, 100, 100, 0.7)';
-                    if (label.includes('Marketing')) color = colorMap['Marketing Digital'];
-                    
-                    return {
-                        ...dataset,
-                        backgroundColor: color,
-                        borderColor: color.replace('0.8', '1'),
-                        borderWidth: 2,
-                        hoverBackgroundColor: color.replace('0.8', '0.95'),
-                        pointStyle: 'circle'
-                    };
-                });
-
-                if (!opportunityBubbleChart) {
-                    opportunityBubbleChart = new Chart(ctxOpportunity, {
-                        type: 'bubble',
-                        data: { datasets: processedDatasets },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'top',
-                                    labels: {
-                                        color: PALETTE.textDark,
-                                        font: { family: 'Inter', size: 13, weight: '600' },
-                                        padding: 20,
-                                        usePointStyle: true,
-                                        pointStyle: 'circle'
-                                    }
-                                },
-                                tooltip: {
-                                    ...commonChartOptions.plugins.tooltip,
-                                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-                                    callbacks: {
-                                        title: (tooltipItems) => tooltipItems[0].dataset.label,
-                                        label: (context) => {
-                                            const d = context.raw;
-                                            const value = d.y >= 1 ? `${d.y.toFixed(2)}M` : `${(d.y * 1000).toFixed(0)}K`;
-                                            return [
-                                                `   Licitaciones: ${d.x}`,
-                                                `   Valor promedio: $${value}`,
-                                                `   Brecha/Saturación: ${d.r} (más grande = más saturado)`
-                                            ];
-                                        }
-                                    }
-                                },
-                                datalabels: {
-                                    display: true,
-                                    color: '#FFFFFF',
-                                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                                    borderRadius: 4,
-                                    padding: 6,
-                                    font: {
-                                        weight: 'bold',
-                                        size: 11
-                                    },
-                                    formatter: (value, context) => {
-                                        return context.dataset.label.split(' ')[0] + '\n' + context.dataset.label.split(' ').slice(1).join(' ');
-                                    },
-                                    anchor: 'center',
-                                    align: 'center'
-                                }
+    if (ctxOpportunity) {
+        if (!opportunityBubbleChart) {
+            opportunityBubbleChart = new Chart(ctxOpportunity, {
+                type: 'bubble',
+                data: {
+                    labels: categoryLabels,
+                    datasets: datasetsWithColorsAndAdjustedData
+                },
+                options: {
+                    ...commonChartOptions,
+                    scales: {
+                        // *** CAMBIO CLAVE 2: EJE X ES CATEGORÍA (Columnas) ***
+                        x: { 
+                            type: 'category', 
+                            labels: categoryLabels, 
+                            title: { 
+                                display: true, 
+                                text: 'Área de Oportunidad' 
                             },
-                            scales: {
-                                x: {
-                                    ...commonChartOptions.scales.x,
-                                    title: {
-                                        display: true,
-                                        text: 'N° de Licitaciones (Competencia ↑)',
-                                        color: PALETTE.textDark,
-                                        font: { family: 'Inter', size: 14, weight: 'bold' }
-                                    },
-                                    min: 0,
-                                    max: Math.max(...processedDatasets.flatMap(d => d.data.map(p => p.x))) * 1.2,
-                                    ticks: { stepSize: 5 }
-                                },
-                                y: {
-                                    ...commonChartOptions.scales.y,
-                                    title: {
-                                        display: true,
-                                        text: 'Valor Promedio por Contrato (Millones USD ↑)',
-                                        color: PALETTE.textDark,
-                                        font: { family: 'Inter', size: 14, weight: 'bold' }
-                                    },
-                                    beginAtZero: true,
-                                    ticks: {
-                                        callback: value => value >= 1 ? `$${value}M` : `$${value * 1000}K`
-                                    }
-                                }
-                            },
-                            animation: {
-                                duration: 1200,
-                                easing: 'easeOutQuart'
-                            }
+                            position: 'bottom' 
                         },
-                        plugins: [ChartDataLabels] // Forzar el uso del plugin aquí
-                    });
-
-                    console.log("Gráfico de Burbujas de Oportunidad CREADO correctamente.");
-                } else {
-                    // Actualización dinámica
-                    opportunityBubbleChart.data.datasets = processedDatasets;
-                    opportunityBubbleChart.options.scales.x.max = Math.max(...processedDatasets.flatMap(d => d.data.map(p => p.x))) * 1.2;
-                    opportunityBubbleChart.update('active');
-                    console.log("Gráfico de Burbujas ACTUALIZADO.");
+                        // Eje Y se mantiene numérico para el Valor Promedio
+                        y: { 
+                            ...commonChartOptions.scales.y, 
+                            title: { 
+                                display: true, 
+                                text: 'Valor Promedio Contrato (Millones USD)' 
+                            } 
+                        }
+                    },
+                    plugins: {
+                        ...commonChartOptions.plugins, 
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            ...commonChartOptions.plugins.tooltip,
+                            callbacks: {
+                                title: (tooltipItems) => tooltipItems[0].dataset.label,
+                                label: (context) => {
+                                    const d = context.raw;
+                                    // Usamos los valores originales almacenados para precisión en el tooltip
+                                    const licitaciones = d.r;
+                                    const valorPromedio = d.originalY || d.y;
+                                    const brecha = d.originalBrecha || 'N/A';
+                                    
+                                    return `Contratos: ${licitaciones} | Valor Prom.: $${valorPromedio.toFixed(2)}M | Brecha: ${brecha}`;
+                                }
+                            }
+                        }
+                    }
                 }
-            } else {
-                console.warn("Datos de Oportunidad (opportunity) faltantes o mal estructurados:", data?.opportunity);
-            }
+            });
+        } else {
+            // Actualizar gráfico existente
+            opportunityBubbleChart.data.labels = categoryLabels;
+            opportunityBubbleChart.data.datasets = datasetsWithColorsAndAdjustedData;
+            opportunityBubbleChart.options.scales.x.labels = categoryLabels;
+            opportunityBubbleChart.update();
+        }
+    } else {
+        console.error("El elemento con ID 'opportunityBubbleChart' no fue encontrado.");
+    }
+} else { 
+    console.warn("Datos de Oportunidad (opportunity) faltantes."); 
+}
 
 
             
