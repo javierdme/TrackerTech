@@ -317,109 +317,115 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 }
 
 
-// Variable global para mantener la instancia del gráfico (debe estar definida globalmente)
-let opportunityBubbleChart = null; 
-// Asumimos que la función commonChartOptions está disponible
+// 4. Gráfico de Oportunidad (Scatter mejorado, reemplaza al bubble original)
+if (data.opportunity) {
+    const ctxOpportunity = document.getElementById('opportunityBubbleChart');
 
-// Función de inicialización del gráfico
-function initializeOpportunityChart(data) {
-    // 4. Gráfico de Burbujas de Oportunidad (Separado por Columnas Verticales)
-    if (data.opportunity) {
-        const ctxOpportunity = document.getElementById('opportunityBubbleChart');
-        
-        // 1. Definir etiquetas y preparar datos
-        const categoryLabels = data.opportunity.datasets.map(d => d.label);
+    // Función para escalar el tamaño visual del punto (r viene de la fuente)
+    const scalePointSize = (r) => {
+        const n = Number(r) || 0;
+        // Escalado no lineal y límites para que no queden puntos gigantes ni invisibles
+        return Math.max(4, Math.min(Math.round(Math.sqrt(n) * 6), 36));
+    };
 
-        const datasetsWithColorsAndAdjustedData = data.opportunity.datasets.map((d, index) => {
-            // Asumimos que cada dataset tiene solo UN punto de dato (d.data[0])
-            const originalPoint = d.data[0]; 
-            
-            // *** 1. CÁLCULO DEL DESPLAZAMIENTO VERTICAL (JITTER) ***
-            // Aplicamos un pequeño desplazamiento aleatorio al Valor Promedio (Y)
-            const jitterRange = 0.05; // Rango de desplazamiento (ajustar si es necesario)
-            const jitterY = (Math.random() - 0.5) * jitterRange; // Valor entre -0.025 y +0.025
-            
-            const adjustedData = [{
-                x: index,               // Posición Horizontal: El índice define la columna/categoría
-                y: originalPoint.y + jitterY, // Posición Vertical: Valor Promedio + Jitter (para evitar superposición)
-                r: originalPoint.x      // Tamaño (Radio): Usamos el N° de Licitaciones (originalmente d.x) como radio
-            }];
-            
-            // Asignar colores basados en la etiqueta (sin cambios)
-            const backgroundColor = d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
-                                    d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
-                                    d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
-                                    d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
-                                    'rgba(255, 45, 85, 0.7)'; // Marketing Digital
-            
+    // Construir datasets para scatter (x = # licitaciones, y = valor promedio, optional r -> tamaño)
+    const datasetsScatter = data.opportunity.datasets.map(d => {
+        const label = String(d.label || '');
+        const borderColor =
+            label.includes('Sistemas') ? 'rgba(94, 92, 230, 1)' :
+            label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 1)' :
+            label.includes('Cloud') ? 'rgba(0, 122, 255, 1)' :
+            label.includes('Desarrollo') ? 'rgba(90, 200, 250, 1)' :
+            'rgba(255, 45, 85, 1)';
+
+        const backgroundColor = borderColor.replace(', 1)', ', 0.45)');
+
+        // Aseguramos estructura de datos y conversión numérica
+        const points = (Array.isArray(d.data) ? d.data : []).map(p => {
+            const x = Number(p.x);
+            const y = Number(p.y);
+            const r = Number(p.r);
             return {
-                ...d,
-                data: adjustedData,
-                backgroundColor: backgroundColor
+                x: isFinite(x) ? x : 0,
+                y: isFinite(y) ? y : 0,
+                // guardamos r original para tooltip y escalamos para el tamaño real
+                _r: isFinite(r) ? r : 0,
+                pointRadius: scalePointSize(r)
             };
         });
 
-        if (ctxOpportunity) {
-            if (!opportunityBubbleChart) {
-                opportunityBubbleChart = new Chart(ctxOpportunity, {
-                    type: 'bubble',
-                    data: {
-                        labels: categoryLabels, // Importante para el eje X categórico
-                        datasets: datasetsWithColorsAndAdjustedData
+        return {
+            label,
+            data: points,
+            borderColor,
+            backgroundColor,
+            showLine: false,
+            pointStyle: 'circle'
+        };
+    });
+
+    if (ctxOpportunity && !opportunityBubbleChart) {
+        opportunityBubbleChart = new Chart(ctxOpportunity, {
+            type: 'scatter',
+            data: { datasets: datasetsScatter },
+            options: {
+                ...commonChartOptions,
+                interaction: { mode: 'nearest', axis: 'xy', intersect: false },
+                scales: {
+                    x: {
+                        ...commonChartOptions.scales.x,
+                        title: { display: true, text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)' },
+                        beginAtZero: true,
+                        ticks: { precision: 0 }
                     },
-                    options: {
-                        ...commonChartOptions,
-                        scales: {
-                            // *** CAMBIO CLAVE 1: EJE X ES CATEGORÍA ***
-                            x: { 
-                                type: 'category', 
-                                labels: categoryLabels, // Muestra las etiquetas de las áreas en las columnas
-                                title: { 
-                                    display: true, 
-                                    text: 'Área de Oportunidad (Eje Categórico)' 
-                                },
-                                position: 'bottom' 
-                            },
-                            // Eje Y se mantiene numérico para el Valor Promedio
-                            y: { 
-                                ...commonChartOptions.scales.y, 
-                                title: { 
-                                    display: true, 
-                                    text: 'Valor Promedio Contrato (Millones USD)' 
-                                } 
-                            }
-                        },
-                        plugins: {
-                            ...commonChartOptions.plugins, 
-                            legend: { position: 'bottom' },
-                            tooltip: {
-                                ...commonChartOptions.plugins.tooltip,
-                                callbacks: {
-                                    title: (tooltipItems) => tooltipItems[0].dataset.label,
-                                    label: (context) => {
-                                        const d = context.raw;
-                                        // d.r es el N° de Licitaciones, d.y tiene el jitter aplicado
-                                        return `Contratos (Tamaño): ${d.r} | Valor Prom. (Aprox.): $${d.y.toFixed(2)}M | Brecha: ${originalPoint.r}`; 
-                                    }
-                                }
+                    y: {
+                        ...commonChartOptions.scales.y,
+                        title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' },
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    ...commonChartOptions.plugins,
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        ...commonChartOptions.plugins.tooltip,
+                        callbacks: {
+                            title: (items) => items[0]?.dataset?.label || '',
+                            label: (context) => {
+                                const p = context.raw;
+                                // p._r es el valor original de "brecha", p.pointRadius es tamaño visual
+                                const lines = [
+                                    `Contratos (N° licitaciones): ${p.x}`,
+                                    `Valor Prom.: $${(Number(p.y) || 0).toFixed(2)}M`
+                                ];
+                                if (p._r != null) lines.push(`Brecha (indicador): ${p._r}`);
+                                return lines;
                             }
                         }
                     }
-                });
-            } else {
-                // Actualizar gráfico existente
-                opportunityBubbleChart.data.labels = categoryLabels;
-                opportunityBubbleChart.data.datasets = datasetsWithColorsAndAdjustedData;
-                opportunityBubbleChart.options.scales.x.labels = categoryLabels;
-                opportunityBubbleChart.update();
+                },
+                // personalizaciones visuales para que puntos no se superpongan excesivamente
+                elements: {
+                    point: {
+                        hoverRadius: 10,
+                        hoverBorderWidth: 2
+                    }
+                }
             }
-        } else {
-            console.error("El elemento con ID 'opportunityBubbleChart' no fue encontrado.");
-        }
-    } else { 
-        console.warn("Datos de Oportunidad (opportunity) faltantes."); 
+        });
+
+        console.log('Scatter de Oportunidad creado correctamente.');
+
+    } else if (opportunityBubbleChart) {
+        // Actualizar datos de manera segura (mantener opciones ya inicializadas)
+        opportunityBubbleChart.data.datasets = datasetsScatter;
+        opportunityBubbleChart.update();
+        console.log('Scatter de Oportunidad actualizado correctamente.');
     }
+} else {
+    console.warn("Datos de Oportunidad (opportunity) faltantes.");
 }
+
             
             
             // 5. Gráfico de Brecha de Habilidades (Stacked Bar)
