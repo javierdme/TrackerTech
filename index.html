@@ -318,200 +318,160 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 
 
 
-            // 4. Gráfico de Burbujas de Oportunidad - VERSIÓN MEJORADA (sin superposiciones)
-            if (data.opportunity && data.opportunity.datasets) {
-                const ctxOpportunity = document.getElementById('opportunityBubbleChart');
-                if (!ctxOpportunity) {
-                    console.error("[BUBBLE CHART] Canvas no encontrado");
-                    return;
-                }
+            // 4. Gráfico de Burbujas de Oportunidad - COLORES OFICIALES + SEPARACIÓN VERTICAL
+if (data.opportunity && data.opportunity.datasets) {
+    const ctxOpportunity = document.getElementById('opportunityBubbleChart');
+    if (!ctxOpportunity) return;
 
-                // Registrar plugin datalabels una sola vez
-                if (typeof ChartDataLabels !== 'undefined' && !Chart.registry.plugins.get('datalabels')) {
-                    Chart.register(ChartDataLabels);
-                }
+    // Registrar datalabels una sola vez
+    if (typeof ChartDataLabels !== 'undefined' && !Chart.registry.plugins.get('datalabels')) {
+        Chart.register(ChartDataLabels);
+    }
 
-                // Mapa de colores por nicho
-        const OFICIAL_COLORS = {
+    // COLORES 100% OFICIALES DE TU DISEÑO (exactos del PALETTE)
+    const OFICIAL_COLORS = {
         'Sistemas de Gestión (ERP)': '#5E5CE6',  // Indigo
         'Ciberseguridad':            '#AF52DE',  // Purple
         'Cloud Computing':          '#007AFF',  // Blue
         'Desarrollo de Apps':        '#5AC8FA',  // Light Blue
         'Marketing Digital':        '#FF2D55'   // Pink
-        };
+    };
 
-                // Función para evitar superposiciones: jitter vertical controlado
-                const applyJitter = (datasets) => {
-                    const points = [];
-                    datasets.forEach(ds => {
-                        ds.data.forEach(point => {
-                            points.push({
-                                x: point.x,
-                                y: point.y,
-                                r: point.r,
-                                label: ds.label,
-                                originalY: point.y,
-                                dataset: ds
-                            });
-                        });
-                    });
+    // Jitter vertical inteligente (evita superposiciones)
+    const applyJitter = (datasets) => {
+        const points = [];
+        datasets.forEach(ds => {
+            ds.data.forEach(p => points.push({
+                x: p.x,
+                y: p.y,
+                r: p.r || 18,
+                label: ds.label,
+                originalY: p.y
+            }));
+        });
 
-                    // Ordenar por X para detectar colisiones
-                    points.sort((a, b) => a.x - b.x);
+        const minDistanceX = 4;
+        const jitterStep = 0.13;
 
-                    const jitterAmount = 0.08; // Ajusta este valor: 0.05 = sutil, 0.15 = muy separado
-                    const minDistanceX = 3; // Si dos puntos están a menos de X licitaciones, aplicar jitter
+        for (let i = 0; i < points.length; i++) {
+            for (let j = i + 1; j < points.length; j++) {
+                if (Math.abs(points[i].x - points[j].x) < minDistanceX) {
+                    const offset = jitterStep * (j - i);
+                    points[j].y = points[j].originalY + offset;
+                    points[i].y = points[i].originalY - offset * 0.5;
+                }
+            }
+        }
 
-                    for (let i = 0; i < points.length; i++) {
-                        for (let j = i + 1; j < points.length; j++) {
-                            if (Math.abs(points[i].x - points[j].x) < minDistanceX) {
-                                const offset = jitterAmount * (j - i);
-                                points[j].y = points[j].originalY + offset;
-                                points[i].y = points[i].originalY - offset * 0.5;
+        return datasets.map(ds => {
+            const label = ds.label;
+            const color = OFICIAL_COLORS[label] || '#888888';
+
+            const newData = ds.data.map(point => {
+                const match = points.find(p => 
+                    p.label === label && 
+                    Math.abs(p.originalY - point.y) < 0.01 && 
+                    p.x === point.x
+                );
+                return {
+                    x: point.x,
+                    y: match ? match.y : point.y,
+                    r: point.r || 18,
+                    originalY: point.y  // valor real para tooltip
+                };
+            });
+
+            return {
+                ...ds,
+                data: newData,
+                backgroundColor: color + 'C0',  // 75% opacidad (hex C0 = 192/255)
+                borderColor: color,
+                borderWidth: 3,
+                hoverBorderWidth: 6
+            };
+        });
+    };
+
+    const finalDatasets = applyJitter(data.opportunity.datasets);
+
+    if (!opportunityBubbleChart) {
+        opportunityBubbleChart = new Chart(ctxOpportunity, {
+            type: 'bubble',
+            data: { datasets: finalDatasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }, // Quitamos leyenda duplicada (ya está en etiquetas)
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.92)',
+                        cornerRadius: 12,
+                        padding: 16,
+                        titleFont: { family: 'Inter', size: 16, weight: 'bold' },
+                        bodyFont: { family: 'Inter', size: 14 },
+                        callbacks: {
+                            title: (items) => items[0].dataset.label,
+                            label: (ctx) => {
+                                const d = ctx.raw;
+                                return [
+                                    `   Competencia: ${d.x} licitaciones`,
+                                    `   Valor promedio: $${d.originalY.toFixed(2)}M`,
+                                    `   Brecha de mercado: ${d.r}`,
+                                    ``,
+                                    `   Posición ajustada para máxima claridad`
+                                ];
                             }
                         }
+                    },
+                    datalabels: {
+                        display: true,
+                        color: '#FFFFFF',
+                        backgroundColor: 'rgba(0,0,0,0.75)',
+                        borderRadius: 8,
+                        padding: 10,
+                        font: { weight: '800', size: 12, family: 'Inter' },
+                        formatter: (value, ctx) => ctx.dataset.label.split(' (')[0],
+                        anchor: 'center',
+                        align: 'center'
                     }
-
-                    // Reconstruir datasets
-                    return datasets.map(ds => {
-                        const originalLabel = ds.label;
-                        const colorKey = originalLabel.includes('Marketing') ? 'Marketing Digital' : originalLabel.split(' ')[0];
-                        const color = colorMap[colorKey] || 'rgba(150, 150, 150, 0.8)';
-
-                        const newData = ds.data.map((point, idx) => {
-                            const matched = points.find(p => 
-                                p.label === originalLabel && 
-                                p.originalY === point.y &&
-                                p.x === point.x
-                            );
-                            return {
-                                x: point.x,
-                                y: matched ? matched.y : point.y,
-                                r: point.r || 15,
-                                originalY: point.y // Guardar valor real
-                            };
-                        });
-
-                        return {
-                            ...ds,
-                            data: newData,
-                            backgroundColor: color,
-                            borderColor: color.replace('0.85', '1'),
-                            borderWidth: 3,
-                            hoverBorderWidth: 5,
-                            pointStyle: 'circle'
-                        };
-                    });
-                };
-
-                const processedDatasets = applyJitter(data.opportunity.datasets);
-
-                if (!opportunityBubbleChart) {
-                    opportunityBubbleChart = new Chart(ctxOpportunity, {
-                        type: 'bubble',
-                        data: { datasets: processedDatasets },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'top',
-                                    labels: {
-                                        font: { family: 'Inter', size: 13, weight: '600' },
-                                        color: PALETTE.textDark,
-                                        usePointStyle: true,
-                                        pointStyle: 'circle',
-                                        padding: 20
-                                    }
-                                },
-                                tooltip: {
-                                    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-                                    titleColor: '#fff',
-                                    bodyColor: '#fff',
-                                    borderColor: '#555',
-                                    borderWidth: 1,
-                                    cornerRadius: 8,
-                                    displayColors: false,
-                                    callbacks: {
-                                        title: (items) => items[0].dataset.label,
-                                        label: (context) => {
-                                            const d = context.raw;
-                                            const realValue = d.originalY?.toFixed(2) || d.y.toFixed(2);
-                                            return [
-                                                `   Licitaciones: ${d.x}`,
-                                                `   Valor promedio real: $${realValue}M`,
-                                                `   Brecha de mercado: ${d.r} (más grande = más saturado)`,
-                                                `   (Separación visual aplicada para claridad)`
-                                            ];
-                                        }
-                                    }
-                                },
-                                datalabels: {
-                                    display: true,
-                                    color: '#FFFFFF',
-                                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                                    borderRadius: 6,
-                                    padding: 8,
-                                    font: {
-                                        weight: 'bold',
-                                        size: 11,
-                                        family: 'Inter'
-                                    },
-                                    formatter: (value, ctx) => {
-                                        const label = ctx.dataset.label || '';
-                                        const short = label.split(' (')[0];
-                                        return short.length > 18 ? short.substring(0, 15) + '...' : short;
-                                    },
-                                    anchor: 'center',
-                                    align: 'center'
-                                }
-                            },
-                            scales: {
-                                x: {
-                                    title: {
-                                        display: true,
-                                        text: 'N° de Licitaciones (Competencia ↑)',
-                                        font: { family: 'Inter', size: 14, weight: 'bold' },
-                                        color: PALETTE.textDark
-                                    },
-                                    beginAtZero: true,
-                                    ticks: { 
-                                        stepSize: 5,
-                                        font: { family: 'Inter' }
-                                    },
-                                    grid: { color: '#E5E5EA' }
-                                },
-                                y: {
-                                    title: {
-                                        display: true,
-                                        text: 'Valor Promedio por Contrato (Millones USD ↑)',
-                                        font: { family: 'Inter', size: 14, weight: 'bold' },
-                                        color: PALETTE.textDark
-                                    },
-                                    beginAtZero: true,
-                                    ticks: {
-                                        callback: (value) => `$${value.toFixed(1)}M`,
-                                        font: { family: 'Inter' }
-                                    },
-                                    grid: { color: '#E5E5EA' }
-                                }
-                            },
-                            animation: {
-                                duration: 1500,
-                                easing: 'easeOutQuart'
-                            }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'N° de Licitaciones (Competencia ↑)',
+                            font: { family: 'Inter', size: 15, weight: 'bold' },
+                            color: '#2C2C2E'
                         },
-                        plugins: [ChartDataLabels]
-                    });
+                        beginAtZero: true,
+                        ticks: { color: '#8E8E93', font: { family: 'Inter' } }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Valor Promedio por Contrato (Millones USD ↑)',
+                            font: { family: 'Inter', size: 15, weight: 'bold' },
+                            color: '#2C2C2E'
+                        },
+                        beginAtZero: true,
+                        ticks: {
+                            callback: (v) => `$${v.toFixed(1)}M`,
+                            color: '#8E8E93',
+                            font: { family: 'Inter' }
+                        }
+                    }
+                },
+                animation: { duration: 1600, easing: 'easeOutQuart' }
+            },
+            plugins: [ChartDataLabels]
+        });
 
-                    console.log("Gráfico de Burbujas creado con separación vertical inteligente");
-                } else {
-                    opportunityBubbleChart.data.datasets = processedDatasets;
-                    opportunityBubbleChart.update('active');
-                }
-            } else {
-                console.warn("Datos de opportunity faltantes o mal formados");
-            }
+        console.log("Burbujas: colores oficiales + separación vertical perfecta");
+    } else {
+        opportunityBubbleChart.data.datasets = finalDatasets;
+        opportunityBubbleChart.update();
+    }
+}
 
 
 
