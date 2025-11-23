@@ -317,63 +317,51 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 }
 
 
-// 4. Gráfico de Oportunidad - Cambiado a Gráfico de Dispersión para más claridad
+            // 4. Gráfico de Burbujas de Oportunidad
+            if (data.opportunity) {
+                const ctxOpportunity = document.getElementById('opportunityBubbleChart');
+                // Asignar colores basados en la etiqueta del dataset
+                const datasetsWithColors = data.opportunity.datasets.map(d => ({
+                    ...d,
+                    backgroundColor: d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
+                                     d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
+                                     d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
+                                     d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
+                                     'rgba(255, 45, 85, 0.7)' // Marketing Digital
+                }));
 
-if (data.opportunity) {
-    const ctxOpportunity = document.getElementById('opportunityBubbleChart');
-
-    // Mantenemos la lógica de colores y datos. Las burbujas (r) se ignoran en el tipo 'scatter'.
-    const datasetsWithColors = data.opportunity.datasets.map(d => ({
-        ...d,
-        // Adaptamos el color de fondo para 'scatter', puede ser solo borde si se prefiere
-        backgroundColor: d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
-                         d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
-                         d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
-                         d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
-                         'rgba(255, 45, 85, 0.7)', // Marketing Digital
-        borderColor: d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 1)' :
-                     d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 1)' :
-                     d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 1)' :
-                     d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 1)' :
-                     'rgba(255, 45, 85, 1)', // Marketing Digital
-        pointRadius: 8, // Aumentar el radio del punto para visibilidad
-        pointHoverRadius: 10
-    }));
-
-    if (ctxOpportunity && !opportunityBubbleChart) {
-        opportunityBubbleChart = new Chart(ctxOpportunity, {
-            // *** CAMBIO CLAVE: 'bubble' a 'scatter' ***
-            type: 'scatter', 
-            data: {
-                datasets: datasetsWithColors
-            },
-            options: {
-                ...commonChartOptions,
-                scales: {
-                    x: { ...commonChartOptions.scales.x, title: { display: true, text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)' } },
-                    y: { ...commonChartOptions.scales.y, title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' } }
-                },
-                plugins: {
-                    ...commonChartOptions.plugins, legend: { position: 'bottom' },
-                    tooltip: {
-                        ...commonChartOptions.plugins.tooltip,
-                        callbacks: {
-                            title: (tooltipItems) => tooltipItems[0].dataset.label,
-                            label: (context) => {
-                                // Asegurarse de que el objeto de datos 'raw' tenga 'r' si se necesita en el tooltip
-                                const d = context.raw; 
-                                return `Contratos: ${d.x} | Valor Prom.: $${d.y.toFixed(2)}M | Brecha: ${d.r}`;
+                if (ctxOpportunity && !opportunityBubbleChart) {
+                    opportunityBubbleChart = new Chart(ctxOpportunity, {
+                        type: 'bubble',
+                        data: {
+                            datasets: datasetsWithColors
+                        },
+                        options: {
+                            ...commonChartOptions,
+                            scales: {
+                                x: { ...commonChartOptions.scales.x, title: { display: true, text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)' } },
+                                y: { ...commonChartOptions.scales.y, title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' } }
+                            },
+                            plugins: {
+                                ...commonChartOptions.plugins, legend: { position: 'bottom' },
+                                tooltip: {
+                                    ...commonChartOptions.plugins.tooltip,
+                                    callbacks: {
+                                        title: (tooltipItems) => tooltipItems[0].dataset.label,
+                                        label: (context) => {
+                                            const d = context.raw;
+                                            return `Contratos: ${d.x} | Valor Prom.: $${d.y.toFixed(2)}M | Brecha: ${d.r}`;
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
+                    });
+                } else if (opportunityBubbleChart) {
+                    opportunityBubbleChart.data.datasets = datasetsWithColors;
+                    opportunityBubbleChart.update();
                 }
-            }
-        });
-    } else if (opportunityBubbleChart) {
-        opportunityBubbleChart.data.datasets = datasetsWithColors;
-        opportunityBubbleChart.update();
-    }
-} else { console.warn("Datos de Oportunidad (opportunity) faltantes."); }
+            } else { console.warn("Datos de Oportunidad (opportunity) faltantes."); }
             
             
             // 5. Gráfico de Brecha de Habilidades (Stacked Bar)
