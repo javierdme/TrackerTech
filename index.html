@@ -317,51 +317,103 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 }
 
 
-            // 4. Gráfico de Burbujas de Oportunidad
-            if (data.opportunity) {
-                const ctxOpportunity = document.getElementById('opportunityBubbleChart');
-                // Asignar colores basados en la etiqueta del dataset
-                const datasetsWithColors = data.opportunity.datasets.map(d => ({
-                    ...d,
-                    backgroundColor: d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
-                                     d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
-                                     d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
-                                     d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
-                                     'rgba(255, 45, 85, 0.7)' // Marketing Digital
-                }));
+// 4. Gráfico de Burbujas de Oportunidad con Columnas Verticales
+if (data.opportunity) {
+    const ctxOpportunity = document.getElementById('opportunityBubbleChart');
+    
+    // 1. OBTENER LAS ETIQUETAS DE CATEGORÍA PARA EL EJE X
+    // Esto se usará para definir las columnas (el índice de cada etiqueta será el valor 'x' del dato)
+    const categoryLabels = data.opportunity.datasets.map(d => d.label);
 
-                if (ctxOpportunity && !opportunityBubbleChart) {
-                    opportunityBubbleChart = new Chart(ctxOpportunity, {
-                        type: 'bubble',
-                        data: {
-                            datasets: datasetsWithColors
+    // 2. MODIFICAR DATASETS: 
+    // - Asignar colores (sin cambios).
+    // - Asignar la posición 'x' basada en el índice.
+    // - Asignar el radio 'r' al número de Licitaciones (competencia).
+    const datasetsWithColorsAndAdjustedData = data.opportunity.datasets.map((d, index) => {
+        // Asumimos que cada dataset tiene solo UN punto de dato (data[0])
+        const originalPoint = d.data[0]; 
+        
+        // Creamos el nuevo punto de dato:
+        // x: Índice de la columna (0, 1, 2, ...)
+        // y: Valor Promedio (sin cambios)
+        // r: N° de Licitaciones (lo que antes era d.x, ahora es el radio)
+        const adjustedData = [{
+            x: index, 
+            y: originalPoint.y, 
+            r: originalPoint.x // El radio 'r' ahora representa el N° de Licitaciones
+        }];
+        
+        // Mantenemos la lógica de colores
+        const backgroundColor = d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
+                                d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
+                                d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
+                                d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
+                                'rgba(255, 45, 85, 0.7)'; // Marketing Digital
+        
+        return {
+            ...d,
+            data: adjustedData, // Usar los datos ajustados
+            backgroundColor: backgroundColor
+        };
+    });
+
+    if (ctxOpportunity && !opportunityBubbleChart) {
+        opportunityBubbleChart = new Chart(ctxOpportunity, {
+            type: 'bubble',
+            data: {
+                labels: categoryLabels, // Usar las etiquetas de categoría aquí
+                datasets: datasetsWithColorsAndAdjustedData
+            },
+            options: {
+                ...commonChartOptions,
+                scales: {
+                    // *** CAMBIO CLAVE 1: EJE X ES CATEGORÍA ***
+                    x: { 
+                        type: 'category', 
+                        labels: categoryLabels, // Definir las etiquetas de las columnas
+                        title: { 
+                            display: true, 
+                            text: 'Área de Oportunidad' // Título del eje X
                         },
-                        options: {
-                            ...commonChartOptions,
-                            scales: {
-                                x: { ...commonChartOptions.scales.x, title: { display: true, text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)' } },
-                                y: { ...commonChartOptions.scales.y, title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' } }
-                            },
-                            plugins: {
-                                ...commonChartOptions.plugins, legend: { position: 'bottom' },
-                                tooltip: {
-                                    ...commonChartOptions.plugins.tooltip,
-                                    callbacks: {
-                                        title: (tooltipItems) => tooltipItems[0].dataset.label,
-                                        label: (context) => {
-                                            const d = context.raw;
-                                            return `Contratos: ${d.x} | Valor Prom.: $${d.y.toFixed(2)}M | Brecha: ${d.r}`;
-                                        }
-                                    }
-                                }
+                        // Asegurar que las etiquetas estén centradas
+                        position: 'bottom' 
+                    },
+                    // *** CAMBIO CLAVE 2: EJE Y SE MANTIENE NUMÉRICO ***
+                    y: { 
+                        ...commonChartOptions.scales.y, 
+                        title: { 
+                            display: true, 
+                            text: 'Valor Promedio Contrato (Millones USD)' 
+                        } 
+                    }
+                },
+                plugins: {
+                    ...commonChartOptions.plugins, 
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        ...commonChartOptions.plugins.tooltip,
+                        callbacks: {
+                            title: (tooltipItems) => tooltipItems[0].dataset.label,
+                            label: (context) => {
+                                const d = context.raw;
+                                // El radio (r) ahora es Licitaciones, y el valor y es Valor Promedio
+                                return `Contratos (Tamaño): ${d.r} | Valor Prom.: $${d.y.toFixed(2)}M | Brecha: ${originalPoint.r}`; // Aquí deberías referenciar la 'Brecha' original si quieres mantenerla en el tooltip
                             }
                         }
-                    });
-                } else if (opportunityBubbleChart) {
-                    opportunityBubbleChart.data.datasets = datasetsWithColors;
-                    opportunityBubbleChart.update();
+                    }
                 }
-            } else { console.warn("Datos de Oportunidad (opportunity) faltantes."); }
+            }
+        });
+    } else if (opportunityBubbleChart) {
+        // Actualizar el gráfico
+        opportunityBubbleChart.data.labels = categoryLabels;
+        opportunityBubbleChart.data.datasets = datasetsWithColorsAndAdjustedData;
+        opportunityBubbleChart.options.scales.x.labels = categoryLabels;
+        opportunityBubbleChart.update();
+    }
+} else { 
+    console.warn("Datos de Oportunidad (opportunity) faltantes."); 
+}
             
             
             // 5. Gráfico de Brecha de Habilidades (Stacked Bar)
