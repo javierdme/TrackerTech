@@ -318,7 +318,7 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 
 
 
-            // 4. Gráfico de Burbujas de Oportunidad - COLORES OFICIALES + SEPARACIÓN VERTICAL
+// 4. Gráfico de Burbujas de Oportunidad - COLORES OFICIALES + SEPARACIÓN VERTICAL
 if (data.opportunity && data.opportunity.datasets) {
     const ctxOpportunity = document.getElementById('opportunityBubbleChart');
     if (!ctxOpportunity) return;
@@ -417,8 +417,6 @@ if (data.opportunity && data.opportunity.datasets) {
                                     `   Competencia: ${d.x} licitaciones`,
                                     `   Valor promedio: $${d.originalY.toFixed(2)}M`,
                                     `   Brecha de mercado: ${d.r}`,
-                                    ``,
-                                    `   Posición ajustada para máxima claridad`
                                 ];
                             }
                         }
@@ -439,7 +437,7 @@ if (data.opportunity && data.opportunity.datasets) {
                     x: {
                         title: {
                             display: true,
-                            text: 'N° de Licitaciones (Competencia ↑)',
+                            text: 'N° de Licitaciones (Competencia ->)',
                             font: { family: 'Inter', size: 15, weight: 'bold' },
                             color: '#2C2C2E'
                         },
