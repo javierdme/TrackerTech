@@ -317,94 +317,36 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 }
 
 
-// 4. Gráfico Scatter de Oportunidad (versión mejorada)
-if (data.opportunity) {
-    const ctxOpportunity = document.getElementById('opportunityBubbleChart');
-
-    // Construcción correcta del dataset para scatter
-    const datasetsScatter = data.opportunity.datasets.map(d => ({
-        label: d.label,
-        borderColor:
-            d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 1)' :
-            d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 1)' :
-            d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 1)' :
-            d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 1)' :
-            'rgba(255, 45, 85, 1)',
-
-        backgroundColor:
-            d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.5)' :
-            d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.5)' :
-            d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.5)' :
-            d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.5)' :
-            'rgba(255, 45, 85, 0.5)',
-
-        // scatter: solo x e y
-        data: d.data.map(p => ({
-            x: Number(p.x),
-            y: Number(p.y),
-            // Opcional: si quieres usar r como tamaño del punto
-            pointRadius: p.r ? Math.max(4, Number(p.r)) : 6  
-        })),
-        showLine: false,
-        pointStyle: 'circle'
-    }));
-
-    if (ctxOpportunity && !opportunityBubbleChart) {
-        opportunityBubbleChart = new Chart(ctxOpportunity, {
-            type: 'scatter',
-            data: {
-                datasets: datasetsScatter
-            },
-            options: {
-                ...commonChartOptions,
-                scales: {
-                    x: {
-                        ...commonChartOptions.scales.x,
-                        title: {
-                            display: true,
-                            text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)'
+            // 5. Gráfico de Brecha de Habilidades (Stacked Bar)
+            if (data.skillGap) {
+                const ctxSkillGap = document.getElementById('skillGapChart');
+                if (ctxSkillGap && !skillGapChart) {
+                    skillGapChart = new Chart(ctxSkillGap, {
+                        type: 'bar',
+                        data: {
+                            labels: data.skillGap.labels,
+                            datasets: [
+                                { label: 'Servicios Saturados (Ej. Marketing)', data: data.skillGap.dataSaturated, backgroundColor: PALETTE.pink },
+                                { label: 'Alta Demanda (Ej. Cloud/Ciberseguridad)', data: data.skillGap.dataHighDemand, backgroundColor: PALETTE.indigo }
+                            ]
                         },
-                        beginAtZero: true
-                    },
-                    y: {
-                        ...commonChartOptions.scales.y,
-                        title: {
-                            display: true,
-                            text: 'Valor Promedio Contrato (Millones USD)'
-                        },
-                        beginAtZero: true
-                    }
-                },
-                plugins: {
-                    ...commonChartOptions.plugins,
-                    legend: {
-                        position: 'bottom'
-                    },
-                    tooltip: {
-                        callbacks: {
-                            title: (items) => items[0].dataset.label,
-                            label: (context) => {
-                                const d = context.raw;
-                                return [
-                                    `Contratos: ${d.x}`,
-                                    `Valor Prom.: $${d.y.toFixed(2)}M`,
-                                    d.pointRadius ? `Brecha: ${d.pointRadius}` : '' // opcional
-                                ];
-                            }
+                        options: {
+                            ...commonChartOptions,
+                            scales: {
+                                x: { ...commonChartOptions.scales.x, stacked: true, grid: { display: false } },
+                                y: { ...commonChartOptions.scales.y, stacked: true, title: { display: true, text: 'N° Emprendimientos Registrados (Fuente: INEC/MDTR)' } }
+                            },
+                            plugins: { ...commonChartOptions.plugins, legend: { position: 'bottom' } }
                         }
-                    }
+                    });
+                } else if (skillGapChart) {
+                    skillGapChart.data.datasets[0].data = data.skillGap.dataSaturated;
+                    skillGapChart.data.datasets[1].data = data.skillGap.dataHighDemand;
+                    skillGapChart.update();
                 }
-            }
-        });
+            } else { console.warn("Datos de Brecha de Habilidades (skillGap) faltantes."); }
 
-    } else if (opportunityBubbleChart) {
-        opportunityBubbleChart.data.datasets = datasetsScatter;
-        opportunityBubbleChart.update();
-    }
-
-} else {
-    console.warn("Datos de Oportunidad (opportunity) faltantes.");
-}
+        }
 
             
             
