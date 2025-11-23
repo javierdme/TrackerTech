@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -219,181 +218,154 @@
                 }
             } else { console.warn("Datos de Crecimiento (growth) faltantes. El gráfico no se actualizará."); }
 
-          // 3. Gráfico de Barras de Demanda (Horizontal Bar) - Foco en la demanda 
-const ctxDemand = document.getElementById('demandBarChart');
+            // 3. Gráfico de Barras de Demanda (Horizontal Bar) - Foco en la demanda
+            const ctxDemand = document.getElementById('demandBarChart');
+            
+            if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
+                
+                // *** FIX: Asegurar que los datos sean numéricos y procesamiento de etiquetas ***
+const numericData = data.growth.data.map(Number);
+                 //const numericData = data.demand.data.map(Number); // Usamos Number en lugar de parseFloat para consistencia
+                const labels = data.demand.labels.map(label => wrapLabels(label, 16));
+                
+                console.log("[DEMAND CHART] Datos numéricos y etiquetas procesadas listos:", {numericData, labels});
 
-if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
-
-    // *** FIX 1: Asegurar datos numéricos ***
-    const numericData = data.demand.data.map(v => Number(v));
-
-    // *** FIX 2: Asegurar etiquetas multilínea correctas ***
-    const labels = data.demand.labels.map(label => wrapLabels(label, 18));
-
-    // Registrar plugin de DataLabels
-    Chart.register(ChartDataLabels);
-
-    // Crear gráfico si no existe
-    if (!demandBarChart) {
-
-        demandBarChart = new Chart(ctxDemand, {
-            type: 'bar',
-            plugins: [ChartDataLabels],
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Valor Contratado (Millones USD)',
-                    data: numericData,
-                    backgroundColor: [
-                        PALETTE.indigo,
-                        PALETTE.purple,
-                        PALETTE.blue,
-                        PALETTE.lightBlue,
-                        PALETTE.pink
-                    ],
-                    borderRadius: 6
-                }]
-            },
-            options: {
-                ...commonChartOptions,
-                indexAxis: 'y',
-
-                scales: {
-                    x: {
-                        beginAtZero: true,
-
-                        // *** FIX 3: Forzar un máximo correcto para gráficos pequeños o grandes ***
-                        suggestedMax: Math.max(...numericData) * 1.2,
-
-                        title: {
-                            display: true,
-                            text: 'Millones USD'
+                // 2. Si el gráfico no existe, crearlo
+                if (!demandBarChart) {
+                    demandBarChart = new Chart(ctxDemand, {
+                        type: 'bar',
+                        // Registrar el plugin de datalabels solo para este chart
+                        plugins: [ChartDataLabels],
+                        data: {
+                            labels: labels, 
+                            datasets: [{
+                                label: 'Valor Contratado (Millones USD)',
+                                data: numericData,
+                                backgroundColor: [PALETTE.indigo, PALETTE.purple, PALETTE.blue, PALETTE.lightBlue, PALETTE.pink],
+                                borderRadius: 6
+                            }]
                         },
-                        ticks: {
-                            callback: value => `${value}M`
-                        }
-                    },
-
-                    y: {
-                        grid: { display: false }
-                    }
-                },
-
-                plugins: {
-                    ...commonChartOptions.plugins,
-                    legend: { display: false },
-
-                    datalabels: {
-                        anchor: 'end',
-                        align: 'end',
-                        offset: 8,
-                        color: PALETTE.textDark,
-                        font: {
-                            weight: 'bold',
-                            size: 12
-                        },
-                        formatter: value => `$${value.toFixed(1)}M`
-                    }
-                }
-            }
-        });
-
-        console.log("Gráfico de Demanda CREADO.");
-
-    } else {
-
-        // *** FIX 4: Actualización correcta ***
-        demandBarChart.data.labels = labels;
-        demandBarChart.data.datasets[0].data = numericData;
-        demandBarChart.update();
-
-        console.log("Gráfico de Demanda ACTUALIZADO.");
-    }
-
-} else if (!ctxDemand) {
-    console.error("[DEMAND CHART] No se encontró el elemento canvas #demandBarChart.");
-
-} else {
-    console.warn("[DEMAND CHART] Datos de Demanda faltantes o incompletos:", data.demand);
-}
-
-
-            // 4. Gráfico de Oportunidad (Scatter mejorado)
-if (data.opportunity) {
-    const ctxOpportunity = document.getElementById('opportunityBubbleChart');
-
-    // Escala para tamaño del punto (r)
-    const scalePointSize = (r) => Math.max(6, Math.min(r * 3, 40));
-
-    // Asignar colores basados en categoría
-    const datasetsWithColors = data.opportunity.datasets.map(d => ({
-        label: d.label,
-        data: d.data.map(p => ({
-            x: p.x,
-            y: p.y,
-            r: scalePointSize(p.r)  // nuevo tamaño de punto
-        })),
-        backgroundColor:
-            d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.8)' :
-            d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.8)' :
-            d.label.includes('Cloud') ? 'rgba(0, 122, 255, 0.8)' :
-            d.label.includes('Desarrollo') ? 'rgba(90, 200, 250, 0.8)' :
-            'rgba(255, 45, 85, 0.8)',
-
-        pointRadius: (ctx) => ctx.raw.r,
-        pointHoverRadius: (ctx) => ctx.raw.r + 4
-    }));
-
-    if (ctxOpportunity && !opportunityBubbleChart) {
-        opportunityBubbleChart = new Chart(ctxOpportunity, {
-            type: 'scatter',
-            data: {
-                datasets: datasetsWithColors
-            },
-            options: {
-                ...commonChartOptions,
-                scales: {
-                    x: {
-                        ...commonChartOptions.scales.x,
-                        title: { display: true, text: 'N° de Licitaciones (Competencia - SERCOP)' },
-                        beginAtZero: true,
-                    },
-                    y: {
-                        ...commonChartOptions.scales.y,
-                        title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' },
-                        beginAtZero: true
-                    }
-                },
-                plugins: {
-                    ...commonChartOptions.plugins,
-                    legend: { position: 'bottom' },
-                    tooltip: {
-                        callbacks: {
-                            title: (items) => items[0].dataset.label,
-                            label: (context) => {
-                                const p = context.raw;
-                                return [
-                                    `Contratos: ${p.x}`,
-                                    `Valor Prom.: $${p.y.toFixed(2)}M`,
-                                    `Brecha (tamaño): ${p.r}`
-                                ];
+                        options: {
+                            ...commonChartOptions, 
+                            indexAxis: 'y', // Configuración clave para gráfico de barras horizontal
+                            scales: {
+                                x: { ...commonChartOptions.scales.x, title: { display: true, text: 'Millones USD' } },
+                                y: { 
+                                    ...commonChartOptions.scales.y, 
+                                    grid: { display: false },
+                                    // Se confía en el manejo nativo de Chart.js para las etiquetas multilínea con indexAxis: 'y'
+                                }
+                            },
+                            plugins: { 
+                                ...commonChartOptions.plugins, 
+                                legend: { display: false },
+                                // Configuración de DataLabels para mostrar valores
+                                datalabels: { 
+                                    anchor: 'end',
+                                    align: 'end',
+                                    offset: 8, 
+                                    color: PALETTE.textDark,
+                                    font: { weight: 'bold', size: 12 },
+                                    formatter: (value, context) => {
+                                        // Muestra el valor con un decimal y la etiqueta 'M' de Millones
+                                        return `$${value.toFixed(1)}M`; 
+                                    }
+                                }
                             }
                         }
-                    }
+                    });
+                    console.log("Gráfico de Demanda CREADO.");
+                } else {
+                    // 3. Si el gráfico existe, solo actualizar los datos
+                    demandBarChart.data.labels = labels;
+                    demandBarChart.data.datasets[0].data = numericData;
+                    demandBarChart.update(); 
+                    console.log("Gráfico de Demanda ACTUALIZADO.");
                 }
+            } else if (!ctxDemand) {
+                console.error("[DEMAND CHART] No se encontró el elemento canvas #demandBarChart.");
+            } else { 
+                console.warn("[DEMAND CHART] Datos de Demanda (demand) faltantes o incompletos:", data.demand); 
             }
-        });
-    } else if (opportunityBubbleChart) {
-        opportunityBubbleChart.data.datasets = datasetsWithColors;
-        opportunityBubbleChart.update();
-    }
 
-} else {
-    console.warn("Datos de Oportunidad (opportunity) faltantes.");
-}
 
+
+            // 4. Gráfico de Burbujas de Oportunidad
+            if (data.opportunity) {
+                const ctxOpportunity = document.getElementById('opportunityBubbleChart');
+                // Asignar colores basados en la etiqueta del dataset
+                const datasetsWithColors = data.opportunity.datasets.map(d => ({
+                    ...d,
+                    backgroundColor: d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
+                                     d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
+                                     d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
+                                     d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
+                                     'rgba(255, 45, 85, 0.7)' // Marketing Digital
+                }));
+
+                if (ctxOpportunity && !opportunityBubbleChart) {
+                    opportunityBubbleChart = new Chart(ctxOpportunity, {
+                        type: 'bubble',
+                        data: {
+                            datasets: datasetsWithColors
+                        },
+                        options: {
+                            ...commonChartOptions,
+                            scales: {
+                                x: { ...commonChartOptions.scales.x, title: { display: true, text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)' } },
+                                y: { ...commonChartOptions.scales.y, title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' } }
+                            },
+                            plugins: {
+                                ...commonChartOptions.plugins, legend: { position: 'bottom' },
+                                tooltip: {
+                                    ...commonChartOptions.plugins.tooltip,
+                                    callbacks: {
+                                        title: (tooltipItems) => tooltipItems[0].dataset.label,
+                                        label: (context) => {
+                                            const d = context.raw;
+                                            return `Contratos: ${d.x} | Valor Prom.: $${d.y.toFixed(2)}M | Brecha: ${d.r}`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } else if (opportunityBubbleChart) {
+                    opportunityBubbleChart.data.datasets = datasetsWithColors;
+                    opportunityBubbleChart.update();
+                }
+            } else { console.warn("Datos de Oportunidad (opportunity) faltantes."); }
             
-            
+            // 5. Gráfico de Brecha de Habilidades (Stacked Bar)
+            if (data.skillGap) {
+                const ctxSkillGap = document.getElementById('skillGapChart');
+                if (ctxSkillGap && !skillGapChart) {
+                    skillGapChart = new Chart(ctxSkillGap, {
+                        type: 'bar',
+                        data: {
+                            labels: data.skillGap.labels,
+                            datasets: [
+                                { label: 'Servicios Saturados (Ej. Marketing)', data: data.skillGap.dataSaturated, backgroundColor: PALETTE.pink },
+                                { label: 'Alta Demanda (Ej. Cloud/Ciberseguridad)', data: data.skillGap.dataHighDemand, backgroundColor: PALETTE.indigo }
+                            ]
+                        },
+                        options: {
+                            ...commonChartOptions,
+                            scales: {
+                                x: { ...commonChartOptions.scales.x, stacked: true, grid: { display: false } },
+                                y: { ...commonChartOptions.scales.y, stacked: true, title: { display: true, text: 'N° Emprendimientos Registrados (Fuente: INEC/MDTR)' } }
+                            },
+                            plugins: { ...commonChartOptions.plugins, legend: { position: 'bottom' } }
+                        }
+                    });
+                } else if (skillGapChart) {
+                    skillGapChart.data.datasets[0].data = data.skillGap.dataSaturated;
+                    skillGapChart.data.datasets[1].data = data.skillGap.dataHighDemand;
+                    skillGapChart.update();
+                }
+            } else { console.warn("Datos de Brecha de Habilidades (skillGap) faltantes."); }
+
+        }
 
         // --- LISTENER DE TIEMPO REAL DE FIRESTORE ---
 
@@ -516,17 +488,14 @@ if (data.opportunity) {
                             throw new Error("API rate limit exceeded after multiple retries.");
                         }
                     } else {
-                        // Throw error, the catch block will handle it
                         throw new Error(`API returned status ${response.status}`);
                     }
                 } catch (error) {
                     if (i < MAX_RETRIES - 1) {
-                        // Only retry for network/transient errors, not necessarily for hard 403s but we try to be resilient
                         await new Promise(resolve => setTimeout(resolve, delay));
                         delay *= 2;
                     } else {
-                        generatedContent.innerHTML = `<p class="text-pink font-bold">¡Error de Conexión o Permisos! (${error.message})</p>
-                        <p class="text-muted">Esto puede ser un problema temporal de la API o de permisos. Por favor, intenta de nuevo en unos momentos.</p>`;
+                        generatedContent.textContent = `Error en la generación de ideas: ${error.message}. Intenta de nuevo más tarde.`;
                         loadingMessage.classList.add('hidden');
                         generateButton.disabled = false;
                         generateButton.textContent = '✨ Generar Ideas Estratégicas';
