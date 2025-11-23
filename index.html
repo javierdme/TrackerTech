@@ -318,51 +318,79 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 }
 
 
-          // 4. Gráfico de Burbujas de Oportunidad
-            if (data.opportunity) {
-                const ctxOpportunity = document.getElementById('opportunityBubbleChart');
-                // Asignar colores basados en la etiqueta del dataset
-                const datasetsWithColors = data.opportunity.datasets.map(d => ({
-                    ...d,
-                    backgroundColor: d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.7)' :
-                                     d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.7)' :
-                                     d.label.includes('Cloud Computing') ? 'rgba(0, 122, 255, 0.7)' :
-                                     d.label.includes('Desarrollo de Apps') ? 'rgba(90, 200, 250, 0.7)' :
-                                     'rgba(255, 45, 85, 0.7)' // Marketing Digital
-                }));
+            // 4. Gráfico de Oportunidad (Scatter mejorado)
+if (data.opportunity) {
+    const ctxOpportunity = document.getElementById('opportunityBubbleChart');
 
-                if (ctxOpportunity && !opportunityBubbleChart) {
-                    opportunityBubbleChart = new Chart(ctxOpportunity, {
-                        type: 'bubble',
-                        data: {
-                            datasets: datasetsWithColors
-                        },
-                        options: {
-                            ...commonChartOptions,
-                            scales: {
-                                x: { ...commonChartOptions.scales.x, title: { display: true, text: 'N° de Licitaciones (Competencia - Fuente: SERCOP)' } },
-                                y: { ...commonChartOptions.scales.y, title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' } }
-                            },
-                            plugins: {
-                                ...commonChartOptions.plugins, legend: { position: 'bottom' },
-                                tooltip: {
-                                    ...commonChartOptions.plugins.tooltip,
-                                    callbacks: {
-                                        title: (tooltipItems) => tooltipItems[0].dataset.label,
-                                        label: (context) => {
-                                            const d = context.raw;
-                                            return `Contratos: ${d.x} | Valor Prom.: $${d.y.toFixed(2)}M | Brecha: ${d.r}`;
-                                        }
-                                    }
-                                }
+    // Escala para tamaño del punto (r)
+    const scalePointSize = (r) => Math.max(6, Math.min(r * 3, 40));
+
+    // Asignar colores basados en categoría
+    const datasetsWithColors = data.opportunity.datasets.map(d => ({
+        label: d.label,
+        data: d.data.map(p => ({
+            x: p.x,
+            y: p.y,
+            r: scalePointSize(p.r)  // nuevo tamaño de punto
+        })),
+        backgroundColor:
+            d.label.includes('Sistemas') ? 'rgba(94, 92, 230, 0.8)' :
+            d.label.includes('Ciberseguridad') ? 'rgba(175, 82, 222, 0.8)' :
+            d.label.includes('Cloud') ? 'rgba(0, 122, 255, 0.8)' :
+            d.label.includes('Desarrollo') ? 'rgba(90, 200, 250, 0.8)' :
+            'rgba(255, 45, 85, 0.8)',
+
+        pointRadius: (ctx) => ctx.raw.r,
+        pointHoverRadius: (ctx) => ctx.raw.r + 4
+    }));
+
+    if (ctxOpportunity && !opportunityBubbleChart) {
+        opportunityBubbleChart = new Chart(ctxOpportunity, {
+            type: 'scatter',
+            data: {
+                datasets: datasetsWithColors
+            },
+            options: {
+                ...commonChartOptions,
+                scales: {
+                    x: {
+                        ...commonChartOptions.scales.x,
+                        title: { display: true, text: 'N° de Licitaciones (Competencia - SERCOP)' },
+                        beginAtZero: true,
+                    },
+                    y: {
+                        ...commonChartOptions.scales.y,
+                        title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' },
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    ...commonChartOptions.plugins,
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            title: (items) => items[0].dataset.label,
+                            label: (context) => {
+                                const p = context.raw;
+                                return [
+                                    `Contratos: ${p.x}`,
+                                    `Valor Prom.: $${p.y.toFixed(2)}M`,
+                                    `Brecha (tamaño): ${p.r}`
+                                ];
                             }
                         }
-                    });
-                } else if (opportunityBubbleChart) {
-                    opportunityBubbleChart.data.datasets = datasetsWithColors;
-                    opportunityBubbleChart.update();
+                    }
                 }
-            } else { console.warn("Datos de Oportunidad (opportunity) faltantes."); }
+            }
+        });
+    } else if (opportunityBubbleChart) {
+        opportunityBubbleChart.data.datasets = datasetsWithColors;
+        opportunityBubbleChart.update();
+    }
+
+} else {
+    console.warn("Datos de Oportunidad (opportunity) faltantes.");
+}
 
             
             
