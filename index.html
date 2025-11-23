@@ -332,13 +332,13 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
                 }
 
                 // Mapa de colores por nicho
-                const colorMap = {
-                    'Sistemas': 'rgba(94, 92, 230, 0.85)',
-                    'Ciberseguridad': 'rgba(175, 82, 222, 0.85)',
-                    'Cloud Computing': 'rgba(0, 122, 255, 0.85)',
-                    'Desarrollo de Apps': 'rgba(90, 200, 250, 0.85)',
-                    'Marketing Digital': 'rgba(255, 45, 85, 0.85)'
-                };
+        const OFICIAL_COLORS = {
+        'Sistemas de Gestión (ERP)': '#5E5CE6',  // Indigo
+        'Ciberseguridad':            '#AF52DE',  // Purple
+        'Cloud Computing':          '#007AFF',  // Blue
+        'Desarrollo de Apps':        '#5AC8FA',  // Light Blue
+        'Marketing Digital':        '#FF2D55'   // Pink
+        };
 
                 // Función para evitar superposiciones: jitter vertical controlado
                 const applyJitter = (datasets) => {
