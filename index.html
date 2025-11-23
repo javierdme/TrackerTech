@@ -317,11 +317,16 @@ if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
 }
 
 
-// 4. Gráfico de Oportunidad (Scatter con columnas y burbujas grandes)
+// 4. Matriz de Oportunidad (Scatter limpio, sin duplicados)
 if (data.opportunity) {
-    const ctxOpportunity = document.getElementById('opportunityBubbleChart');
 
-    // columnas fijas por categoría
+    const ctxOpportunity = document.getElementById('opportunityBubbleChart');
+    if (!ctxOpportunity) {
+        console.error("Canvas #opportunityBubbleChart no encontrado");
+        return;
+    }
+
+    // Mapear categorías → columnas fijas
     const categoryX = {
         'Sistemas': 1,
         'Ciberseguridad': 2,
@@ -330,58 +335,75 @@ if (data.opportunity) {
         'Marketing Digital': 5
     };
 
-    // Escalado agresivo para burbujas visibles
+    // Escalar tamaño de burbuja
     const scalePointSize = (r) => {
-        const n = Number(r) || 1;
-        return Math.min(60, Math.max(12, n * 8)); 
+        const n = Number(r);
+        if (!isFinite(n)) return 14;
+        return Math.min(60, Math.max(16, n * 4)); 
     };
 
+    // Limpiar datos y evitar duplicados por categoría
+    const usedCategories = new Set();
+
     const datasetsScatter = data.opportunity.datasets.map(d => {
-        const label = String(d.label || '');
 
+        const label = String(d.label || "");
+
+        // Identificar categoría real
         const category = Object.keys(categoryX).find(c => label.includes(c));
-        const xColumn = categoryX[category] || 0;
+        if (!category) {
+            console.warn("Categoría no reconocida:", label);
+            return null;
+        }
 
-        const borderColor =
-            label.includes('Sistemas') ? 'rgba(94,92,230,1)' :
-            label.includes('Ciberseguridad') ? 'rgba(175,82,222,1)' :
-            label.includes('Cloud') ? 'rgba(0,122,255,1)' :
-            label.includes('Desarrollo') ? 'rgba(90,200,250,1)' :
-            'rgba(255,45,85,1)';
+        if (usedCategories.has(category)) {
+            return null; // evita duplicados
+        }
+        usedCategories.add(category);
 
-        const backgroundColor = borderColor.replace(',1)', ',0.45)');
+        // Tomar solo 1 punto por categoría (el más relevante)
+        const rawPoint = Array.isArray(d.data) && d.data.length > 0 ? d.data[0] : null;
+        if (!rawPoint) return null;
 
-        const points = (Array.isArray(d.data) ? d.data : []).map(p => {
-            const y = Number(p.y);
-            const r = Number(p.r);
+        const point = {
+            x: categoryX[category],       // columna fija
+            y: Number(rawPoint.y) || 0,   // valor real
+            radius: scalePointSize(rawPoint.r)
+        };
 
-            return {
-                x: xColumn,                // <-- ahora cada categoría tiene su propia columna
-                y: isFinite(y) ? y : 0,
-                _r: r,
-                pointRadius: scalePointSize(r)
-            };
-        });
+        const baseColor =
+            label.includes('Sistemas') ? '94,92,230' :
+            label.includes('Ciberseguridad') ? '175,82,222' :
+            label.includes('Cloud') ? '0,122,255' :
+            label.includes('Desarrollo') ? '90,200,250' :
+            '255,45,85'; // Marketing
 
         return {
             label,
-            data: points,
-            borderColor,
-            backgroundColor,
-            showLine: false,
-            pointStyle: 'circle'
+            data: [{
+                x: point.x,
+                y: point.y,
+                pointRadius: point.radius
+            }],
+            borderColor: `rgba(${baseColor}, 1)`,
+            backgroundColor: `rgba(${baseColor}, 0.45)`,
+            pointStyle: "circle",
+            showLine: false
         };
-    });
+    }).filter(Boolean); // elimina nulls
 
-    if (ctxOpportunity && !opportunityBubbleChart) {
+    // Crear o actualizar el gráfico
+    if (!opportunityBubbleChart) {
         opportunityBubbleChart = new Chart(ctxOpportunity, {
-            type: 'scatter',
+            type: "scatter",
             data: { datasets: datasetsScatter },
             options: {
                 ...commonChartOptions,
                 scales: {
                     x: {
-                        title: { display: true, text: 'Categorías (Columnas por Sector)' },
+                        min: 0.5,
+                        max: 5.5,
+                        title: { display: true, text: "Categorías (Columnas por Sector)" },
                         ticks: {
                             callback: function (value) {
                                 return {
@@ -390,27 +412,25 @@ if (data.opportunity) {
                                     3: 'Cloud',
                                     4: 'Apps',
                                     5: 'Marketing'
-                                }[value] || value;
+                                }[value] || "";
                             }
-                        },
-                        min: 0.5,
-                        max: 5.5
+                        }
                     },
                     y: {
-                        title: { display: true, text: 'Valor Promedio Contrato (Millones USD)' },
-                        beginAtZero: true
+                        beginAtZero: true,
+                        title: { display: true, text: "Valor Promedio Contrato (Millones USD)" }
                     }
                 },
                 plugins: {
-                    legend: { position: 'bottom' },
+                    legend: { position: "bottom" },
                     tooltip: {
                         callbacks: {
                             title: items => items[0].dataset.label,
-                            label: (ctx) => {
-                                const p = ctx.raw;
+                            label: ctx => {
+                                const d = ctx.raw;
                                 return [
-                                    `Valor Prom.: $${p.y.toFixed(2)}M`,
-                                    `Brecha: ${p._r}`
+                                    `Valor Prom.: $${d.y.toFixed(2)}M`,
+                                    `Tamaño Brecha: ${d.pointRadius}`
                                 ];
                             }
                         }
@@ -418,11 +438,16 @@ if (data.opportunity) {
                 }
             }
         });
-    } else if (opportunityBubbleChart) {
+
+    } else {
         opportunityBubbleChart.data.datasets = datasetsScatter;
         opportunityBubbleChart.update();
     }
+
+} else {
+    console.warn("Datos de Oportunidad (opportunity) faltantes.");
 }
+
 
 
             
