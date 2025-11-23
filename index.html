@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -224,8 +225,7 @@
             if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
                 
                 // *** FIX: Asegurar que los datos sean numéricos y procesamiento de etiquetas ***
-const numericData = data.growth.data.map(Number);
-                 //const numericData = data.demand.data.map(Number); // Usamos Number en lugar de parseFloat para consistencia
+                const numericData = data.demand.data.map(Number); // Usamos Number en lugar de parseFloat para consistencia
                 const labels = data.demand.labels.map(label => wrapLabels(label, 16));
                 
                 console.log("[DEMAND CHART] Datos numéricos y etiquetas procesadas listos:", {numericData, labels});
@@ -287,7 +287,6 @@ const numericData = data.growth.data.map(Number);
             } else { 
                 console.warn("[DEMAND CHART] Datos de Demanda (demand) faltantes o incompletos:", data.demand); 
             }
-
 
 
             // 4. Gráfico de Burbujas de Oportunidad
@@ -488,14 +487,17 @@ const numericData = data.growth.data.map(Number);
                             throw new Error("API rate limit exceeded after multiple retries.");
                         }
                     } else {
+                        // Throw error, the catch block will handle it
                         throw new Error(`API returned status ${response.status}`);
                     }
                 } catch (error) {
                     if (i < MAX_RETRIES - 1) {
+                        // Only retry for network/transient errors, not necessarily for hard 403s but we try to be resilient
                         await new Promise(resolve => setTimeout(resolve, delay));
                         delay *= 2;
                     } else {
-                        generatedContent.textContent = `Error en la generación de ideas: ${error.message}. Intenta de nuevo más tarde.`;
+                        generatedContent.innerHTML = `<p class="text-pink font-bold">¡Error de Conexión o Permisos! (${error.message})</p>
+                        <p class="text-muted">Esto puede ser un problema temporal de la API o de permisos. Por favor, intenta de nuevo en unos momentos.</p>`;
                         loadingMessage.classList.add('hidden');
                         generateButton.disabled = false;
                         generateButton.textContent = '✨ Generar Ideas Estratégicas';
