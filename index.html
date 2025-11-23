@@ -224,7 +224,10 @@
             if (data.demand && data.demand.labels && data.demand.data && ctxDemand) {
                 
                 // *** FIX: Asegurar que los datos sean numéricos y procesamiento de etiquetas ***
-const numericData = data.growth.data.map(Number);
+const numericData = data.demand.data.map(value => {
+    const num = Number(value);
+    return isNaN(num) ? 0 : num;
+});
                  //const numericData = data.demand.data.map(Number); // Usamos Number en lugar de parseFloat para consistencia
                 const labels = data.demand.labels.map(label => wrapLabels(label, 16));
                 
